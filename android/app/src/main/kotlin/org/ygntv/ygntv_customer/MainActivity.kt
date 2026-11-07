@@ -87,20 +87,20 @@ class MainActivity : FlutterActivity() {
         require(uri.scheme == "https" && (host == "ygntv.org" || host == "www.ygntv.org")) {
             "YGNTV updates must use the official HTTPS website"
         }
-        require(uri.path?.matches(Regex("^/app-updates/customer-test/[A-Za-z0-9._-]+\\.apk$")) == true) {
-            "This is not an official YGNTV TEST update file"
+        require(uri.path?.matches(Regex("^/app-updates/customer-stable/[A-Za-z0-9._-]+\\.apk$")) == true) {
+            "This is not an official YGNTV update file"
         }
         val sha256 = call.argument<String>("sha256")?.lowercase()
             ?: error("Missing update checksum")
         require(sha256.matches(Regex("^[a-f0-9]{64}$"))) {
             "The YGNTV update checksum is invalid"
         }
-        val rawName = call.argument<String>("fileName") ?: "ygntv-customer-test-update.apk"
+        val rawName = call.argument<String>("fileName") ?: "ygntv-customer-update.apk"
         val fileName = rawName.replace(Regex("[^A-Za-z0-9._-]"), "_")
         require(fileName.endsWith(".apk", ignoreCase = true)) { "The update file must be an APK" }
         val request = DownloadManager.Request(uri)
-            .setTitle(call.argument<String>("title") ?: "YGNTV TEST app update")
-            .setDescription("Downloading the official YGNTV TEST app update")
+            .setTitle(call.argument<String>("title") ?: "YGNTV app update")
+            .setDescription("Downloading the YGNTV app update")
             .setMimeType("application/vnd.android.package-archive")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setAllowedOverMetered(true)

@@ -52,6 +52,7 @@ app.*.map.json
 **/key.properties
 *.jks
 *.keystore
+*.p12
 .env
 .env.*
 **/google-services.json

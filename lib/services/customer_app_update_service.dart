@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 
-const customerTestReleaseManifestUrl =
-    'https://ygntv.org/app-updates/customer-test/latest.json';
+const customerReleaseManifestUrl =
+    'https://ygntv.org/app-updates/customer-stable/latest.json';
 const _packageName = 'org.ygntv.ygntv_customer';
 const _updateChannel = MethodChannel('org.ygntv.customer/app_update');
 
@@ -37,7 +37,7 @@ class AppUpdateRelease {
     final versionCode = json['version_code'];
     final apkUrl = Uri.tryParse('${json['apk_url'] ?? ''}');
     final sha256 = '${json['sha256'] ?? ''}'.toLowerCase();
-    if (channel != 'customer-test' ||
+    if (channel != 'customer-stable' ||
         packageName != _packageName ||
         versionName is! String ||
         versionName.trim().isEmpty ||
@@ -46,10 +46,10 @@ class AppUpdateRelease {
         apkUrl == null ||
         apkUrl.scheme != 'https' ||
         !{'ygntv.org', 'www.ygntv.org'}.contains(apkUrl.host.toLowerCase()) ||
-        !RegExp(r'^/app-updates/customer-test/[A-Za-z0-9._-]+\.apk$')
+        !RegExp(r'^/app-updates/customer-stable/[A-Za-z0-9._-]+\.apk$')
             .hasMatch(apkUrl.path) ||
         !RegExp(r'^[a-f0-9]{64}$').hasMatch(sha256)) {
-      throw const FormatException('The YGNTV TEST update manifest is invalid.');
+      throw const FormatException('The YGNTV update manifest is invalid.');
     }
     return AppUpdateRelease(
       channel: channel as String,
@@ -105,17 +105,15 @@ class CustomerAppUpdateService {
 
   Future<AppUpdateRelease> fetchLatestRelease() async {
     final response = await _client.get(
-      Uri.parse(customerTestReleaseManifestUrl),
+      Uri.parse(customerReleaseManifestUrl),
       headers: const {'Accept': 'application/json'},
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw const FormatException(
-        'The latest YGNTV TEST build could not be checked.',
-      );
+      throw const FormatException('The latest YGNTV app could not be checked.');
     }
     final decoded = jsonDecode(response.body);
     if (decoded is! Map) {
-      throw const FormatException('The YGNTV TEST update manifest is invalid.');
+      throw const FormatException('The YGNTV update manifest is invalid.');
     }
     return AppUpdateRelease.fromJson(Map<String, dynamic>.from(decoded));
   }

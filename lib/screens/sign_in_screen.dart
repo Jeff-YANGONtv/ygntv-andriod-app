@@ -125,7 +125,7 @@ class _SignInScreenState extends State<SignInScreen> {
                         ),
                         const SizedBox(height: 19),
                         const Text(
-                          'PRIVATE ANDROID TEST BUILD',
+                          'UNOFFICIAL ANDROID RELEASE',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Color(0xFF696771),

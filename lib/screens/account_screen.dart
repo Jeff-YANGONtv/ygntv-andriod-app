@@ -203,7 +203,7 @@ class _AccountScreenState extends State<AccountScreen> {
           _ActionTile(
             icon: Icons.system_update_alt_rounded,
             title: 'Check for app updates',
-            subtitle: 'Check for the latest private TEST build',
+            subtitle: 'Check for the latest YGNTV app release',
             onTap: () {
               widget.onCheckForUpdates?.call();
             },
@@ -335,7 +335,7 @@ class _AccountScreenState extends State<AccountScreen> {
         ),
         const SizedBox(height: 12),
         const Text(
-          'TEST BUILD · Private Android customer app · YGNTV.org',
+          'UNOFFICIAL V1 · YGNTV.org · Android',
           textAlign: TextAlign.center,
           style: TextStyle(color: Color(0xFF74717B), fontSize: 9),
         ),

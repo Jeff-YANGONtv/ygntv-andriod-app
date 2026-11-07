@@ -130,7 +130,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       if (!mounted) return;
       if (release == null) {
         if (manual) {
-          _showAppUpdateMessage('You are using the latest YGNTV TEST build.');
+          _showAppUpdateMessage('You are using the latest YGNTV app.');
         }
         return;
       }
@@ -241,7 +241,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
         backgroundColor: ygntvPanel,
         title: const Text('Allow YGNTV updates'),
         content: const Text(
-          'Android needs your permission to install this private TEST update. '
+          'Android needs your permission to install this YGNTV app update. '
           'Allow “Install unknown apps” for YGNTV, then return here. Android '
           'will still ask you to confirm the update.',
         ),
