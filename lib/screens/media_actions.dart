@@ -32,6 +32,11 @@ Future<void> runMediaAction(
             !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
           throw const AuthException('The download source could not be opened.');
         }
+        await service.recordLocalNotification(
+          title: 'Download opened',
+          message: 'The download source for “$title” was opened.',
+          type: 'download_opened',
+        );
         if (context.mounted) {
           _showMessage(context, 'Opened the official download source.');
         }
@@ -60,6 +65,11 @@ Future<void> runMediaAction(
           !await launchUrl(embed, mode: LaunchMode.externalApplication)) {
         throw const AuthException('The external stream could not be opened.');
       }
+      await service.recordLocalNotification(
+        title: 'Started watching',
+        message: 'You opened “$title” to watch.',
+        type: 'watch_started',
+      );
       return;
     }
 
@@ -86,6 +96,13 @@ Future<void> runMediaAction(
       headers['Origin'] = 'https://ygntv.org';
       headers['Cookie'] = 'ygntv_playback_session=${playback.playbackCookie}';
     }
+    await service.recordLocalNotification(
+      title: 'Started watching',
+      message:
+          'You started watching “${playback.title.isNotEmpty ? playback.title : title}”.',
+      type: 'watch_started',
+    );
+    if (!context.mounted) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => VideoPlayerScreen(

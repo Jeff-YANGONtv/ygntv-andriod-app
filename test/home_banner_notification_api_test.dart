@@ -6,7 +6,7 @@ import 'package:http/testing.dart';
 import 'package:ygntv_customer/auth/auth_service.dart';
 
 void main() {
-  test('loads active https hero banners in the API display order', () async {
+  test('loads active HTTPS top-slot banners in the API display order', () async {
     final requests = <http.Request>[];
     final client = MockClient((request) async {
       requests.add(request);
@@ -69,7 +69,7 @@ void main() {
     final service = AuthService(client: client, tokenReader: () async => null);
     addTearDown(service.dispose);
 
-    final banners = await service.getHeroBanners();
+    final banners = await service.getTopAdBanners();
 
     expect(banners.map((banner) => banner.id), [1, 2]);
     expect(

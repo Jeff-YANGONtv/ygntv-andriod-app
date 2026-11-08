@@ -39,10 +39,12 @@ class _FakeCustomerService extends AuthService {
       notifications: [],
       unreadCount: 0,
     ),
+    this.marqueeEntries = const [],
   }) : super(client: MockClient((_) async => http.Response('{}', 200)));
 
   final List<PaymentAccount> paymentAccounts;
   final TvNotificationFeed notificationFeed;
+  final List<TvHomeMarqueeEntry> marqueeEntries;
   int supportStarts = 0;
   int supportSends = 0;
   int paymentAccountCalls = 0;
@@ -108,6 +110,10 @@ class _FakeCustomerService extends AuthService {
 
   @override
   Future<TvNotificationFeed> getNotifications() async => notificationFeed;
+
+  @override
+  Future<List<TvHomeMarqueeEntry>> getHomeMarqueeEntries() async =>
+      marqueeEntries;
 
   @override
   Future<TvNotificationFeed> markNotificationRead(String id) async =>
@@ -531,6 +537,90 @@ void main() {
     expect(find.text('YGNTV Updates'), findsOneWidget);
     expect(find.text('New YGNTV update'), findsOneWidget);
   });
+
+  testWidgets('home marquee is hidden when empty and shown for Admin text', (
+    tester,
+  ) async {
+    const session = AuthSession(
+      token: 'test',
+      userId: '1',
+      name: 'Test Viewer',
+      email: 'viewer@example.com',
+    );
+    Widget home(_FakeCustomerService service) => MaterialApp(
+      theme: ThemeData.dark(useMaterial3: true),
+      home: CustomerHomeScreen(
+        session: session,
+        authService: service,
+        onSignOut: () async {},
+      ),
+    );
+
+    await tester.pumpWidget(home(_FakeCustomerService()));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('customer-home-marquee')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(
+      home(
+        _FakeCustomerService(
+          marqueeEntries: const [
+            TvHomeMarqueeEntry(
+              content: 'Admin announcement',
+              textColor: '#73C9FF',
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const ValueKey('customer-home-marquee')), findsOneWidget);
+  });
+
+  testWidgets(
+    'shared app header and bottom navigation stay fixed across tabs',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(useMaterial3: true),
+          home: CustomerHomeScreen(
+            session: const AuthSession(
+              token: 'test',
+              userId: '1',
+              name: 'Test Viewer',
+              email: 'viewer@example.com',
+            ),
+            authService: _FakeCustomerService(),
+            onSignOut: () async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('customer-app-sticky-header')),
+        findsOneWidget,
+      );
+      expect(find.byType(NavigationBar), findsOneWidget);
+      await tester.drag(
+        find.byType(CustomScrollView).first,
+        const Offset(0, -500),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('customer-app-sticky-header')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Movies'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('customer-app-sticky-header')),
+        findsOneWidget,
+      );
+      expect(find.byType(NavigationBar), findsOneWidget);
+    },
+  );
 
   testWidgets('home bell hides the number when API omits unread_count', (
     tester,

@@ -326,6 +326,7 @@ class _LibraryListState extends State<_LibraryList> {
       await widget.service.removeSavedContent(
         entry.contentType,
         entry.contentId,
+        title: entry.title,
       );
       if (mounted) {
         await _refresh();

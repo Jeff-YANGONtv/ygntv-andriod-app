@@ -9,6 +9,7 @@ void main() {
       'movies': AppDeepLinkDestination.movies,
       'series': AppDeepLinkDestination.series,
       'search': AppDeepLinkDestination.search,
+      'blog': AppDeepLinkDestination.blog,
       'account': AppDeepLinkDestination.account,
       'library': AppDeepLinkDestination.library,
       'notifications': AppDeepLinkDestination.notifications,
@@ -88,33 +89,33 @@ void main() {
     const checksum =
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     final valid = <String, dynamic>{
-      'channel': 'customer-stable',
+      'channel': 'customer-test',
       'package_name': 'org.ygntv.ygntv_customer',
-      'version_name': '1.0.0',
-      'version_code': 2018,
-      'apk_url': 'https://ygntv.org/app-updates/customer-stable/app.apk',
+      'version_name': '1.1.4-test',
+      'version_code': 2014,
+      'apk_url': 'https://ygntv.org/app-updates/customer-test/app.apk',
       'sha256': checksum,
       'release_notes': 'Redeem links and app updates.',
       'size_bytes': 32000000,
     };
 
-    test('accepts a signed HTTPS customer stable release manifest', () {
+    test('accepts a signed HTTPS customer TEST release manifest', () {
       final release = AppUpdateRelease.fromJson(valid);
-      expect(release.versionCode, 2018);
-      expect(release.channel, 'customer-stable');
+      expect(release.versionCode, 2014);
+      expect(release.channel, 'customer-test');
       expect(release.apkUrl.scheme, 'https');
       expect(release.sha256, checksum);
     });
 
     test(
-      'rejects non-stable, wrong-package, unsafe APK and invalid checksum data',
+      'rejects non-test, wrong-package, unsafe APK and invalid checksum data',
       () {
         for (final changed in [
           {...valid, 'channel': 'production'},
           {...valid, 'package_name': 'other.app'},
           {
             ...valid,
-            'apk_url': 'http://ygntv.org/app-updates/customer-stable/app.apk',
+            'apk_url': 'http://ygntv.org/app-updates/customer-test/app.apk',
           },
           {...valid, 'apk_url': 'https://evil.example/app.apk'},
           {...valid, 'sha256': 'not-a-checksum'},

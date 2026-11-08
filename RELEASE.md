@@ -2,7 +2,18 @@
 
 The public unofficial v1 is `1.0.0` (Android `versionCode` 2018), package `org.ygntv.ygntv_customer`, arm64-v8a only. The download page is <https://ygntv.org/app/> and the stable update manifest is <https://ygntv.org/app-updates/customer-stable/latest.json>.
 
-## Build the next release
+## Latest private TEST build
+
+The current private QA build is `1.1.8-TEST` (Android `versionCode` 6023), package `org.ygntv.ygntv_customer.test`, arm64-v8a. Its app updater uses the separate `customer-test` channel. The APK is intentionally kept outside Git; do not publish it to the public app page or stable update manifest.
+
+Rebuild this QA version with:
+
+```bash
+flutter test
+flutter build apk --release --flavor qa --split-per-abi --target-platform android-arm64 --build-name=1.1.8 --build-number=6023 --android-project-arg=force-version-code-ignoring-abi=true
+```
+
+## Build the next stable release
 
 Increase both the app version and build number in `pubspec.yaml`, run the Flutter tests, then build the arm64 split APK with the ABI version-code offset disabled:
 

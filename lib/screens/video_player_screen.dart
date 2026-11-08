@@ -53,6 +53,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(_toggleLandscape());
     _initializePlayer();
     _progressTimer = Timer.periodic(
       const Duration(seconds: 15),
@@ -221,7 +222,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     ),
   );
 
-  void _toggleLandscape() async {
+  Future<void> _toggleLandscape() async {
     final next = !_landscapeMode;
     if (next) {
       await SystemChrome.setPreferredOrientations(const [
@@ -267,6 +268,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         style: const TextStyle(fontWeight: FontWeight.w800),
       ),
     ),
+  );
+
+  Widget _standbyState(Widget content) => Stack(
+    fit: StackFit.expand,
+    children: [
+      content,
+      if (_landscapeMode)
+        Positioned(
+          top: 2,
+          left: 4,
+          child: IconButton.filledTonal(
+            tooltip: 'Back',
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+        ),
+    ],
   );
 
   @override
@@ -319,7 +337,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 _speedMenu(),
                 IconButton(
                   tooltip: 'Landscape fullscreen',
-                  onPressed: _toggleLandscape,
+                  onPressed: () => unawaited(_toggleLandscape()),
                   icon: const Icon(Icons.screen_rotation_alt_rounded),
                 ),
               ],
@@ -334,11 +352,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 child: AspectRatio(
                   aspectRatio: ready ? controller!.value.aspectRatio : 16 / 9,
                   child: _error != null
-                      ? _errorState()
+                      ? _standbyState(_errorState())
                       : !ready
-                      ? const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFFE5454F),
+                      ? _standbyState(
+                          const Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFFE5454F),
+                            ),
                           ),
                         )
                       : GestureDetector(
@@ -460,7 +480,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                             _speedMenu(),
                                             IconButton(
                                               tooltip: 'Exit landscape',
-                                              onPressed: _toggleLandscape,
+                                              onPressed: () =>
+                                                  unawaited(_toggleLandscape()),
                                               icon: const Icon(
                                                 Icons.fullscreen_exit_rounded,
                                               ),

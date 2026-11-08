@@ -273,7 +273,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           final feed = snapshot.data!;
           final hasUnreadItems = feed.notifications.any((item) => !item.isRead);
           final summary = [
-            if (feed.hasServerUnreadCount && feed.unreadCount > 0)
+            if (feed.hasUnreadCount && feed.unreadCount > 0)
               '${feed.unreadCount} unread',
             if (_downloads.isNotEmpty) '${_downloads.length} downloads',
           ].join(' · ');

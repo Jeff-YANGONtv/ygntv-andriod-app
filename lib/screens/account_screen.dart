@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../auth/auth_service.dart';
-import '../deep_links/app_deep_link.dart';
-import '../widgets/app_page_link_button.dart';
 import '../widgets/ygntv_brand.dart';
 import 'library_screen.dart';
 import 'follow_us_screen.dart';
@@ -99,14 +97,11 @@ class _AccountScreenState extends State<AccountScreen> {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
       children: [
-        Row(
-          children: [
-            const YgntvBrandLockup(compact: true),
-            const Spacer(),
-            AppPageLinkButton(uri: AppDeepLink.linkFor('account')),
-          ],
+        const Text(
+          'Account',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 16),
         FutureBuilder<TvProfileData>(
           future: _profile,
           builder: (context, snapshot) {
@@ -203,7 +198,7 @@ class _AccountScreenState extends State<AccountScreen> {
           _ActionTile(
             icon: Icons.system_update_alt_rounded,
             title: 'Check for app updates',
-            subtitle: 'Check for the latest YGNTV app release',
+            subtitle: 'Check for the latest private TEST build',
             onTap: () {
               widget.onCheckForUpdates?.call();
             },
@@ -335,7 +330,7 @@ class _AccountScreenState extends State<AccountScreen> {
         ),
         const SizedBox(height: 12),
         const Text(
-          'UNOFFICIAL V1 · YGNTV.org · Android',
+          'TEST BUILD · Private Android customer app · YGNTV.org',
           textAlign: TextAlign.center,
           style: TextStyle(color: Color(0xFF74717B), fontSize: 9),
         ),

@@ -3,6 +3,24 @@ import 'package:ygntv_customer/deep_links/app_deep_link.dart';
 
 void main() {
   group('AppDeepLink.tryParse', () {
+    test('accepts the Blog tab deep link', () {
+      final link = AppDeepLink.tryParse(
+        Uri.parse('https://ygntv.org/app/blog'),
+      );
+
+      expect(link?.destination, AppDeepLinkDestination.blog);
+      expect(AppDeepLink.linkFor('blog').path, '/app/blog');
+    });
+
+    test('accepts an exact Blog article link', () {
+      final uri = AppDeepLink.blogLinkFor('sample-story');
+      final link = AppDeepLink.tryParse(uri);
+
+      expect(uri.path, '/app/blog/sample-story');
+      expect(link?.destination, AppDeepLinkDestination.blog);
+      expect(link?.slug, 'sample-story');
+    });
+
     test('accepts the movies catalogue route', () {
       final link = AppDeepLink.tryParse(
         Uri.parse('https://ygntv.org/app/movies'),
@@ -55,7 +73,7 @@ void main() {
         'https://ygntv.org/app',
         'https://ygntv.org/app/movie',
         'https://ygntv.org/app/movies/extra',
-        'https://ygntv.org/app/blog/story',
+        'https://ygntv.org/app/blog/story/extra',
         'https://ygntv.org/app/movie/../other',
       ]) {
         expect(AppDeepLink.tryParse(Uri.parse(url)), isNull, reason: url);

@@ -10,12 +10,13 @@ import '../widgets/app_page_link_button.dart';
 import '../widgets/resilient_network_image.dart';
 import '../widgets/ygntv_brand.dart';
 import 'account_screen.dart';
+import 'blog_screen.dart';
+import 'catalog_browser_screen.dart';
 import 'library_screen.dart';
 import 'media_actions.dart';
 import 'media_detail_screen.dart';
 import 'manual_transfer_screen.dart';
 import 'notifications_screen.dart';
-import 'search_screen.dart';
 import 'subscription_screen.dart';
 import 'support_chat_screen.dart';
 
@@ -43,13 +44,19 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
   late Future<List<CatalogItem>> _movies;
   late Future<List<CatalogItem>> _series;
   late Future<List<TvLibraryEntry>> _continueWatching;
-  late Future<List<TvHomeBanner>> _heroBanners;
+  late Future<List<TvHomeBanner>> _topAdBanners;
+  late Future<List<TvBlogPost>> _homeBlogPosts;
   final PageController _bannerController = PageController();
+  final PageController _blogController = PageController();
   int _bannerIndex = 0;
+  int _blogIndex = 0;
   TvNotificationFeed? _notificationFeed;
+  List<TvHomeMarqueeEntry> _homeMarquee = const [];
   bool _refreshingNotifications = false;
   Timer? _notificationTimer;
+  Timer? _marqueeTimer;
   Timer? _bannerTimer;
+  Timer? _blogTimer;
   Timer? _appUpdateTimer;
   final CustomerAppUpdateService _appUpdateService = CustomerAppUpdateService();
   DateTime? _lastUpdateCheckAt;
@@ -67,13 +74,22 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       (_) => _consumeDeepLinkEvent(),
     );
     unawaited(_refreshNotifications());
+    unawaited(_refreshHomeMarquee());
     _notificationTimer = Timer.periodic(
       const Duration(seconds: 15),
       (_) => _refreshNotifications(),
     );
+    _marqueeTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _refreshHomeMarquee(),
+    );
     _bannerTimer = Timer.periodic(
       const Duration(seconds: 6),
       (_) => _advanceBanner(),
+    );
+    _blogTimer = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => _advanceBlogHero(),
     );
     _appUpdateTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) unawaited(_checkForAppUpdate());
@@ -85,9 +101,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     WidgetsBinding.instance.removeObserver(this);
     widget.deepLinkEvent?.removeListener(_consumeDeepLinkEvent);
     _notificationTimer?.cancel();
+    _marqueeTimer?.cancel();
     _bannerTimer?.cancel();
+    _blogTimer?.cancel();
     _appUpdateTimer?.cancel();
     _bannerController.dispose();
+    _blogController.dispose();
     super.dispose();
   }
 
@@ -105,6 +124,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_refreshNotifications());
+      unawaited(_refreshHomeMarquee());
       unawaited(_onAppResumed());
     }
   }
@@ -130,7 +150,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       if (!mounted) return;
       if (release == null) {
         if (manual) {
-          _showAppUpdateMessage('You are using the latest YGNTV app.');
+          _showAppUpdateMessage('You are using the latest YGNTV TEST build.');
         }
         return;
       }
@@ -241,7 +261,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
         backgroundColor: ygntvPanel,
         title: const Text('Allow YGNTV updates'),
         content: const Text(
-          'Android needs your permission to install this YGNTV app update. '
+          'Android needs your permission to install this private TEST update. '
           'Allow “Install unknown apps” for YGNTV, then return here. Android '
           'will still ask you to confirm the update.',
         ),
@@ -289,12 +309,31 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     if (_refreshingNotifications) return;
     _refreshingNotifications = true;
     try {
-      final feed = await widget.authService.getNotifications();
-      if (mounted) setState(() => _notificationFeed = feed);
-    } catch (_) {
-      // Keep the last server-confirmed count when the connection is unavailable.
+      try {
+        final feed = await widget.authService.getNotifications();
+        if (mounted) setState(() => _notificationFeed = feed);
+      } catch (_) {
+        // Keep the last confirmed feed; the download poll below still runs.
+      }
+      try {
+        await widget.authService.getAndroidDownloads();
+      } catch (_) {
+        // Completion polling is best-effort.
+      }
     } finally {
       _refreshingNotifications = false;
+    }
+  }
+
+  Future<void> _refreshHomeMarquee() async {
+    try {
+      final entries = await widget.authService.getHomeMarqueeEntries();
+      if (mounted &&
+          _marqueeSignature(entries) != _marqueeSignature(_homeMarquee)) {
+        setState(() => _homeMarquee = entries);
+      }
+    } catch (_) {
+      // Keep the last Admin-provided copy, or hide the ticker if none was loaded.
     }
   }
 
@@ -320,20 +359,52 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     );
   }
 
+  void _advanceBlogHero() {
+    if (!mounted ||
+        _selectedTab != 0 ||
+        !_blogController.hasClients ||
+        _blogController.position.viewportDimension <= 0 ||
+        _blogController.position.maxScrollExtent <= 0) {
+      return;
+    }
+    final position = _blogController.position;
+    final pageCount =
+        (position.maxScrollExtent / position.viewportDimension).round() + 1;
+    if (pageCount < 2) return;
+    final currentPage = _blogController.page?.round() ?? 0;
+    unawaited(
+      _blogController.animateToPage(
+        (currentPage + 1) % pageCount,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+  }
+
   void _refreshCatalog() {
     _movies = widget.authService.loadCatalog('movie');
     _series = widget.authService.loadCatalog('series');
     _continueWatching = widget.authService.getContinueWatching();
-    _heroBanners = widget.authService.getHeroBanners();
+    _topAdBanners = widget.authService.getTopAdBanners();
+    _homeBlogPosts = widget.authService.getBlogPosts();
     _bannerIndex = 0;
+    _blogIndex = 0;
     if (_bannerController.hasClients) _bannerController.jumpToPage(0);
+    if (_blogController.hasClients) _blogController.jumpToPage(0);
   }
 
   Future<void> _refresh() async {
     setState(_refreshCatalog);
     unawaited(_refreshNotifications());
+    unawaited(_refreshHomeMarquee());
     try {
-      await Future.wait([_movies, _series, _continueWatching, _heroBanners]);
+      await Future.wait([
+        _movies,
+        _series,
+        _continueWatching,
+        _topAdBanners,
+        _homeBlogPosts,
+      ]);
     } catch (_) {
       // Each shelf displays its own live API error state.
     }
@@ -368,7 +439,21 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
         setState(() => _selectedTab = 0);
         return;
       case AppDeepLinkDestination.search:
+        // Keep legacy links working; Search now lives inside each catalog tab.
+        setState(() => _selectedTab = 1);
+        return;
+      case AppDeepLinkDestination.blog:
         setState(() => _selectedTab = 3);
+        if (link.slug != null) {
+          await Navigator.of(context).push<void>(
+            MaterialPageRoute(
+              builder: (_) => BlogDetailScreen(
+                service: widget.authService,
+                slug: link.slug!,
+              ),
+            ),
+          );
+        }
         return;
       case AppDeepLinkDestination.account:
         setState(() => _selectedTab = 4);
@@ -502,7 +587,67 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: ygntvBackground,
-    body: SafeArea(child: _selectedView()),
+    appBar: AppBar(
+      key: const ValueKey('customer-app-sticky-header'),
+      automaticallyImplyLeading: false,
+      titleSpacing: 16,
+      toolbarHeight: 62,
+      surfaceTintColor: Colors.transparent,
+      title: const YgntvBrandLockup(compact: true),
+      actions: [
+        AppPageLinkButton(uri: AppDeepLink.linkFor('home')),
+        IconButton(
+          tooltip: 'My Library',
+          onPressed: _openLibrary,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+          icon: const Icon(Icons.video_library_outlined, color: ygntvGold),
+        ),
+        IconButton(
+          tooltip: 'Updates',
+          onPressed: _openNotifications,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+          icon: Badge(
+            isLabelVisible:
+                (_notificationFeed?.hasUnreadCount ?? false) &&
+                (_notificationFeed?.unreadCount ?? 0) > 0,
+            label: Text(
+              (_notificationFeed?.unreadCount ?? 0) > 99
+                  ? '99+'
+                  : '${_notificationFeed?.unreadCount ?? 0}',
+            ),
+            child: const Icon(
+              Icons.notifications_none_rounded,
+              color: ygntvGold,
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Account',
+          onPressed: () => setState(() => _selectedTab = 4),
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+          icon: CircleAvatar(
+            radius: 15,
+            backgroundColor: ygntvRed.withValues(alpha: .18),
+            child: Text(
+              _initial(widget.session.name),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+      ],
+    ),
+    body: SafeArea(top: false, child: _selectedView()),
     bottomNavigationBar: NavigationBar(
       height: 67,
       backgroundColor: const Color(0xFF111116),
@@ -526,9 +671,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
           label: 'Series',
         ),
         NavigationDestination(
-          icon: Icon(Icons.search_rounded),
-          selectedIcon: Icon(Icons.manage_search_rounded),
-          label: 'Search',
+          icon: Icon(Icons.article_outlined),
+          selectedIcon: Icon(Icons.article_rounded),
+          label: 'Blog',
         ),
         NavigationDestination(
           icon: Icon(Icons.person_outline_rounded),
@@ -541,9 +686,23 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
 
   Widget _selectedView() => switch (_selectedTab) {
     0 => _homeView(),
-    1 => _catalogPage('Movies to discover', _movies, 'movie'),
-    2 => _catalogPage('Series to binge', _series, 'series'),
-    3 => SearchScreen(service: widget.authService, onOpenItem: _openItem),
+    1 => CatalogBrowserScreen(
+      service: widget.authService,
+      kind: 'movie',
+      title: 'Movie',
+      catalogFuture: _movies,
+      onOpenItem: _openItem,
+      onRefresh: _refresh,
+    ),
+    2 => CatalogBrowserScreen(
+      service: widget.authService,
+      kind: 'series',
+      title: 'Series',
+      catalogFuture: _series,
+      onOpenItem: _openItem,
+      onRefresh: _refresh,
+    ),
+    3 => BlogScreen(service: widget.authService),
     _ => AccountScreen(
       service: widget.authService,
       session: widget.session,
@@ -562,60 +721,17 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
-              child: Row(
-                children: [
-                  const YgntvBrandLockup(compact: true),
-                  const Spacer(),
-                  AppPageLinkButton(uri: AppDeepLink.linkFor('home')),
-                  IconButton(
-                    tooltip: 'My Library',
-                    onPressed: _openLibrary,
-                    icon: const Icon(
-                      Icons.video_library_outlined,
-                      color: ygntvGold,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Updates',
-                    onPressed: _openNotifications,
-                    icon: Badge(
-                      isLabelVisible:
-                          (_notificationFeed?.hasServerUnreadCount ?? false) &&
-                          (_notificationFeed?.unreadCount ?? 0) > 0,
-                      label: Text(
-                        (_notificationFeed?.unreadCount ?? 0) > 99
-                            ? '99+'
-                            : '${_notificationFeed?.unreadCount ?? 0}',
-                      ),
-                      child: const Icon(
-                        Icons.notifications_none_rounded,
-                        color: ygntvGold,
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    onTap: () => setState(() => _selectedTab = 4),
-                    borderRadius: BorderRadius.circular(50),
-                    child: CircleAvatar(
-                      radius: 17,
-                      backgroundColor: ygntvRed.withValues(alpha: .18),
-                      child: Text(
-                        _initial(widget.session.name),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+          if (_homeMarquee.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(19, 3, 19, 0),
+                child: _HomeMarquee(
+                  key: const ValueKey('customer-home-marquee'),
+                  entries: _homeMarquee,
+                ),
               ),
             ),
-          ),
+          SliverToBoxAdapter(child: _topAdSlider()),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 15),
@@ -650,18 +766,14 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
               ),
             ),
           ),
-          SliverToBoxAdapter(child: _heroBannerSlider()),
+          SliverToBoxAdapter(child: _blogHeroSlider()),
           SliverToBoxAdapter(child: _continueRail()),
           SliverToBoxAdapter(
-            child: _catalogRail(
-              title: 'Movies to discover',
-              future: _movies,
-              kind: 'movie',
-            ),
+            child: _catalogRail(title: 'Movie', future: _movies, kind: 'movie'),
           ),
           SliverToBoxAdapter(
             child: _catalogRail(
-              title: 'Series to binge',
+              title: 'Series',
               future: _series,
               kind: 'series',
             ),
@@ -672,43 +784,100 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     );
   }
 
-  Widget _heroBannerSlider() => FutureBuilder<List<TvHomeBanner>>(
-    future: _heroBanners,
+  Widget _topAdSlider() => FutureBuilder<List<TvHomeBanner>>(
+    future: _topAdBanners,
     builder: (context, snapshot) {
       final banners = snapshot.data ?? const <TvHomeBanner>[];
-      if (banners.isEmpty) return _featuredCard();
+      if (banners.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: AspectRatio(
+          key: const ValueKey('home-top-banner-aspect-ratio'),
+          aspectRatio: 728 / 90,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox.expand(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  PageView.builder(
+                    key: const ValueKey('home-top-banner-slider'),
+                    controller: _bannerController,
+                    itemCount: banners.length,
+                    onPageChanged: (index) =>
+                        setState(() => _bannerIndex = index),
+                    itemBuilder: (context, index) =>
+                        _bannerCard(banners[index]),
+                  ),
+                  if (banners.length > 1)
+                    Positioned(
+                      right: 8,
+                      bottom: 6,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List<Widget>.generate(
+                          banners.length,
+                          (index) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            width: index == _bannerIndex ? 12 : 5,
+                            height: 5,
+                            margin: const EdgeInsets.only(left: 3),
+                            decoration: BoxDecoration(
+                              color: index == _bannerIndex
+                                  ? ygntvGold
+                                  : Colors.white54,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  Widget _blogHeroSlider() => FutureBuilder<List<TvBlogPost>>(
+    future: _homeBlogPosts,
+    builder: (context, snapshot) {
+      final posts = snapshot.data ?? const <TvBlogPost>[];
+      if (posts.isEmpty) return const SizedBox.shrink();
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(21),
           child: SizedBox(
+            key: const ValueKey('home-blog-hero-slider'),
             height: 220,
             width: double.infinity,
             child: Stack(
               fit: StackFit.expand,
               children: [
                 PageView.builder(
-                  controller: _bannerController,
-                  itemCount: banners.length,
-                  onPageChanged: (index) =>
-                      setState(() => _bannerIndex = index),
-                  itemBuilder: (context, index) => _bannerCard(banners[index]),
+                  controller: _blogController,
+                  itemCount: posts.length,
+                  onPageChanged: (index) => setState(() => _blogIndex = index),
+                  itemBuilder: (context, index) => _blogHeroCard(posts[index]),
                 ),
-                if (banners.length > 1)
+                if (posts.length > 1)
                   Positioned(
                     right: 15,
                     bottom: 15,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: List<Widget>.generate(
-                        banners.length,
+                        posts.length,
                         (index) => AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
-                          width: index == _bannerIndex ? 16 : 6,
+                          width: index == _blogIndex ? 16 : 6,
                           height: 6,
                           margin: const EdgeInsets.only(left: 5),
                           decoration: BoxDecoration(
-                            color: index == _bannerIndex
+                            color: index == _blogIndex
                                 ? ygntvGold
                                 : Colors.white54,
                             borderRadius: BorderRadius.circular(99),
@@ -725,19 +894,25 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     },
   );
 
-  Widget _bannerCard(TvHomeBanner banner) => GestureDetector(
-    onTap: banner.buttonName == null && banner.linkUrl != null
-        ? () => _openBannerLink(banner.linkUrl)
-        : null,
+  Widget _blogHeroCard(TvBlogPost post) => GestureDetector(
+    onTap: () => Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) =>
+            BlogDetailScreen(service: widget.authService, slug: post.slug),
+      ),
+    ),
     child: Stack(
       fit: StackFit.expand,
       children: [
-        ResilientNetworkImage(
-          url: banner.imageUrl,
-          fit: BoxFit.cover,
-          cacheWidth: 780,
-          fallback: const _FeatureBackdrop(),
-        ),
+        if (post.image.isNotEmpty)
+          ResilientNetworkImage(
+            url: post.image,
+            fit: BoxFit.cover,
+            cacheWidth: 780,
+            fallback: const _FeatureBackdrop(),
+          )
+        else
+          const _FeatureBackdrop(),
         const DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -749,14 +924,24 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
         ),
         Positioned(
           left: 17,
-          right: banner.buttonName == null ? 17 : 76,
+          right: 17,
           bottom: 15,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (post.category.isNotEmpty)
+                Text(
+                  post.category.toUpperCase(),
+                  style: const TextStyle(
+                    color: ygntvGold,
+                    fontSize: 9,
+                    letterSpacing: 1.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               const SizedBox(height: 7),
               Text(
-                banner.name,
+                post.title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -766,17 +951,16 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
                   letterSpacing: -.5,
                 ),
               ),
-              if (banner.linkUrl != null && banner.buttonName != null) ...[
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 34,
-                  child: FilledButton.tonalIcon(
-                    onPressed: () => _openBannerLink(banner.linkUrl),
-                    icon: const Icon(Icons.open_in_new_rounded, size: 15),
-                    label: Text(banner.buttonName!),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                    ),
+              if (post.excerpt.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  post.excerpt,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFD0CDD3),
+                    fontSize: 10,
+                    height: 1.35,
                   ),
                 ),
               ],
@@ -784,6 +968,28 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
           ),
         ),
       ],
+    ),
+  );
+
+  Widget _bannerCard(TvHomeBanner banner) => GestureDetector(
+    onTap: banner.linkUrl == null
+        ? null
+        : () => _openBannerLink(banner.linkUrl),
+    child: ResilientNetworkImage(
+      url: banner.imageUrl,
+      fit: BoxFit.contain,
+      cacheWidth: 1456,
+      fallback: ColoredBox(
+        color: ygntvPanel,
+        child: Center(
+          child: Text(
+            banner.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+          ),
+        ),
+      ),
     ),
   );
 
@@ -815,110 +1021,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       }
     }
   }
-
-  Widget _featuredCard() => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-    child: FutureBuilder<List<CatalogItem>>(
-      future: _movies,
-      builder: (context, snapshot) {
-        final item = snapshot.data?.firstOrNull;
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(21),
-          child: SizedBox(
-            height: 220,
-            width: double.infinity,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (item != null && item.backdropUrl.isNotEmpty)
-                  ResilientNetworkImage(
-                    url: item.backdropUrl,
-                    fit: BoxFit.cover,
-                    cacheWidth: 780,
-                    fallback: const _FeatureBackdrop(),
-                  )
-                else if (item != null && item.posterUrl.isNotEmpty)
-                  ResilientNetworkImage(
-                    url: item.posterUrl,
-                    fit: BoxFit.cover,
-                    cacheWidth: 342,
-                    fallback: const _FeatureBackdrop(),
-                  )
-                else
-                  const _FeatureBackdrop(),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Color(0x11000000), Color(0xEE09090D)],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 17,
-                  right: 17,
-                  bottom: 15,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(
-                            Icons.auto_awesome_rounded,
-                            color: ygntvGold,
-                            size: 14,
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            'YANGON TV PICKS',
-                            style: TextStyle(
-                              color: ygntvGold,
-                              fontSize: 9,
-                              letterSpacing: 1.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 7),
-                      Text(
-                        item?.title ??
-                            (snapshot.hasError
-                                ? 'Your next story awaits.'
-                                : 'Stories worth staying up for.'),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          height: 1.08,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -.5,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        item?.synopsis.isNotEmpty == true
-                            ? item!.synopsis
-                            : 'Discover movies and series picked for you.',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFFD0CDD3),
-                          fontSize: 10,
-                          height: 1.35,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    ),
-  );
 
   Widget _continueRail() => Padding(
     padding: const EdgeInsets.only(bottom: 21),
@@ -1043,128 +1145,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       },
     ),
   );
-
-  Widget _catalogPage(
-    String title,
-    Future<List<CatalogItem>> future,
-    String kind,
-  ) => RefreshIndicator(
-    color: ygntvRed,
-    onRefresh: _refresh,
-    child: CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(19, 15, 19, 18),
-            child: Row(
-              children: [
-                const YgntvBrandLockup(compact: true),
-                const Spacer(),
-                AppPageLinkButton(
-                  uri: AppDeepLink.linkFor(
-                    kind == 'movie' ? 'movies' : 'series',
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Refresh catalog',
-                  onPressed: _refresh,
-                  icon: const Icon(Icons.refresh_rounded),
-                ),
-              ],
-            ),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 15),
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 25,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -.6,
-              ),
-            ),
-          ),
-        ),
-        FutureBuilder<List<CatalogItem>>(
-          future: future,
-          builder: (context, snapshot) {
-            final items = snapshot.data ?? const <CatalogItem>[];
-            if (items.isEmpty &&
-                snapshot.connectionState == ConnectionState.waiting) {
-              return const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: CircularProgressIndicator(color: ygntvRed),
-                ),
-              );
-            }
-            if (items.isEmpty && snapshot.hasError) {
-              return SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.wifi_off_rounded,
-                          color: ygntvMuted,
-                          size: 31,
-                        ),
-                        const SizedBox(height: 11),
-                        const Text(
-                          'Could not load titles.',
-                          style: TextStyle(color: ygntvMuted),
-                        ),
-                        const SizedBox(height: 10),
-                        OutlinedButton(
-                          onPressed: _refresh,
-                          child: const Text('Try again'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }
-            if (items.isEmpty) {
-              return const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Text(
-                    'No titles available yet.',
-                    style: TextStyle(color: ygntvMuted),
-                  ),
-                ),
-              );
-            }
-            return SliverPadding(
-              padding: const EdgeInsets.fromLTRB(15, 0, 15, 24),
-              sliver: SliverGrid.builder(
-                itemCount: items.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 13,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: .55,
-                ),
-                itemBuilder: (context, index) => _PosterCard(
-                  key: ValueKey('${items[index].kind}:${items[index].id}'),
-                  item: items[index],
-                  onTap: () => _openItem(items[index]),
-                  grid: true,
-                ),
-              ),
-            );
-          },
-        ),
-      ],
-    ),
-  );
 }
 
 class _SectionTitle extends StatelessWidget {
@@ -1193,18 +1173,12 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _PosterCard extends StatelessWidget {
-  const _PosterCard({
-    required this.item,
-    required this.onTap,
-    this.grid = false,
-    super.key,
-  });
+  const _PosterCard({required this.item, required this.onTap, super.key});
   final CatalogItem item;
   final VoidCallback onTap;
-  final bool grid;
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: grid ? null : 113,
+    width: 113,
     child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -1390,4 +1364,185 @@ class _FeatureBackdrop extends StatelessWidget {
 String _initial(String name) {
   final trimmed = name.trim();
   return trimmed.isEmpty ? 'Y' : trimmed.characters.first.toUpperCase();
+}
+
+String _marqueeSignature(Iterable<TvHomeMarqueeEntry> entries) => entries
+    .map((entry) => '${entry.content}\u0000${entry.textColor}')
+    .join('\u0001');
+
+Color _marqueeColor(String value) {
+  final hex = value.startsWith('#') ? value.substring(1) : value;
+  if (!RegExp(r'^[0-9A-Fa-f]{6}$').hasMatch(hex)) return ygntvGold;
+  return Color(int.parse('FF$hex', radix: 16));
+}
+
+class _HomeMarquee extends StatefulWidget {
+  const _HomeMarquee({required this.entries, super.key});
+
+  final List<TvHomeMarqueeEntry> entries;
+
+  @override
+  State<_HomeMarquee> createState() => _HomeMarqueeState();
+}
+
+class _HomeMarqueeState extends State<_HomeMarquee>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 18),
+    )..repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HomeMarquee oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_marqueeSignature(oldWidget.entries) !=
+        _marqueeSignature(widget.entries)) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    TextSpan marqueeSpan({required bool outlined}) {
+      final outline = Paint()
+        ..color = const Color(0xFF000000)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true;
+      final children = <InlineSpan>[];
+      for (var index = 0; index < widget.entries.length; index++) {
+        if (index > 0) {
+          children.add(
+            TextSpan(
+              text: '  •  ',
+              style: outlined
+                  ? TextStyle(
+                      foreground: outline,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    )
+                  : const TextStyle(
+                      color: ygntvGold,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+            ),
+          );
+        }
+        final entry = widget.entries[index];
+        children.add(
+          TextSpan(
+            text: '${entry.content}     ',
+            style: outlined
+                ? TextStyle(
+                    foreground: outline,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  )
+                : TextStyle(
+                    color: _marqueeColor(entry.textColor),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+          ),
+        );
+      }
+      return TextSpan(children: children);
+    }
+
+    final fillTextPainter = TextPainter(
+      text: marqueeSpan(outlined: false),
+      textDirection: Directionality.of(context),
+      maxLines: 1,
+    )..layout();
+    final itemWidthWithGap = fillTextPainter.width + 24;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final repeatCount =
+            (constraints.maxWidth / itemWidthWithGap).ceil() + 2;
+        return SizedBox(
+          height: 34,
+          child: ClipRect(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                final outlineTextPainter = TextPainter(
+                  text: marqueeSpan(outlined: true),
+                  textDirection: Directionality.of(context),
+                  maxLines: 1,
+                )..layout();
+                return OverflowBox(
+                  alignment: Alignment.centerLeft,
+                  minWidth: 0,
+                  maxWidth: double.infinity,
+                  child: SizedBox(
+                    width: itemWidthWithGap * repeatCount,
+                    height: 34,
+                    child: CustomPaint(
+                      painter: _HomeMarqueePainter(
+                        outlineTextPainter: outlineTextPainter,
+                        fillTextPainter: fillTextPainter,
+                        itemWidth: itemWidthWithGap,
+                        repeatCount: repeatCount,
+                        progress: _controller.value,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HomeMarqueePainter extends CustomPainter {
+  const _HomeMarqueePainter({
+    required this.outlineTextPainter,
+    required this.fillTextPainter,
+    required this.itemWidth,
+    required this.repeatCount,
+    required this.progress,
+  });
+
+  final TextPainter outlineTextPainter;
+  final TextPainter fillTextPainter;
+  final double itemWidth;
+  final int repeatCount;
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final top = (size.height - fillTextPainter.height) / 2;
+    final start = 12 - itemWidth * progress;
+    for (var index = 0; index < repeatCount; index++) {
+      final offset = Offset(start + itemWidth * index, top);
+      outlineTextPainter.paint(canvas, offset);
+      fillTextPainter.paint(canvas, offset);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HomeMarqueePainter oldDelegate) =>
+      progress != oldDelegate.progress ||
+      itemWidth != oldDelegate.itemWidth ||
+      repeatCount != oldDelegate.repeatCount ||
+      outlineTextPainter.text != oldDelegate.outlineTextPainter.text ||
+      fillTextPainter.text != oldDelegate.fillTextPainter.text;
 }

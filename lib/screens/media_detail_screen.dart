@@ -57,9 +57,13 @@ class _MediaDetailScreenState extends State<MediaDetailScreen> {
     setState(() => _saveBusy = true);
     try {
       if (_saved) {
-        await widget.service.removeSavedContent('movie', id);
+        await widget.service.removeSavedContent(
+          'movie',
+          id,
+          title: widget.item.title,
+        );
       } else {
-        await widget.service.saveContent('movie', id);
+        await widget.service.saveContent('movie', id, title: widget.item.title);
       }
       if (mounted) {
         setState(() => _saved = !_saved);
@@ -78,7 +82,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen> {
     final key = '$id';
     setState(() => _savingEpisode = key);
     try {
-      await widget.service.saveContent('episode', id);
+      await widget.service.saveContent('episode', id, title: episode.title);
       if (mounted) _message('Episode added to My List.');
     } catch (error) {
       if (mounted) _message(error.toString());

@@ -3,6 +3,7 @@ enum AppDeepLinkDestination {
   movies,
   series,
   search,
+  blog,
   account,
   library,
   notifications,
@@ -34,6 +35,10 @@ class AppDeepLink {
   static Uri linkFor(String route, {Map<String, String> query = const {}}) =>
       Uri.https('ygntv.org', '/app/$route', query.isEmpty ? null : query);
 
+  static Uri blogLinkFor(String slug) => Uri.parse(
+    'https://ygntv.org/app/blog/${Uri.encodeComponent(slug.trim())}',
+  );
+
   static AppDeepLink? tryParse(Uri uri) {
     if (uri.scheme != 'https' ||
         !{'ygntv.org', 'www.ygntv.org'}.contains(uri.host.toLowerCase())) {
@@ -53,6 +58,7 @@ class AppDeepLink {
         'search' => const AppDeepLink(
           destination: AppDeepLinkDestination.search,
         ),
+        'blog' => const AppDeepLink(destination: AppDeepLinkDestination.blog),
         'account' => const AppDeepLink(
           destination: AppDeepLinkDestination.account,
         ),
@@ -75,6 +81,12 @@ class AppDeepLink {
     }
 
     if (segments.length == 3 && segments[0] == 'app') {
+      if (segments[1] == 'blog' && _validSegment(segments[2])) {
+        return AppDeepLink(
+          destination: AppDeepLinkDestination.blog,
+          slug: segments[2],
+        );
+      }
       if (segments[1] == 'library') {
         const tabs = {'continue', 'history', 'list', 'offline'};
         if (!tabs.contains(segments[2])) return null;

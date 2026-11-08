@@ -9,6 +9,7 @@ import 'package:http_parser/http_parser.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:uuid/uuid.dart';
 
+import 'local_notification_store.dart';
 import 'support_models.dart';
 
 const _apiHost = 'api.ygntv.org';
@@ -520,6 +521,59 @@ class TvHomeBanner {
   bool get isUsable => imageUrl.isNotEmpty;
 }
 
+class TvHomeMarqueeEntry {
+  const TvHomeMarqueeEntry({required this.content, this.textColor = '#E8C27E'});
+
+  final String content;
+  final String textColor;
+
+  factory TvHomeMarqueeEntry.fromJson(Map<String, dynamic> json) {
+    final rawColor = _firstString(json, ['text_color']).trim().toUpperCase();
+    return TvHomeMarqueeEntry(
+      content: _firstString(json, ['content']).trim(),
+      textColor: RegExp(r'^#[0-9A-F]{6}$').hasMatch(rawColor)
+          ? rawColor
+          : '#E8C27E',
+    );
+  }
+}
+
+class TvBlogPost {
+  const TvBlogPost({
+    required this.id,
+    required this.slug,
+    required this.title,
+    required this.excerpt,
+    required this.date,
+    required this.category,
+    required this.author,
+    required this.image,
+    this.content = '',
+  });
+
+  final String id;
+  final String slug;
+  final String title;
+  final String excerpt;
+  final String date;
+  final String category;
+  final String author;
+  final String image;
+  final String content;
+
+  factory TvBlogPost.fromJson(Map<String, dynamic> json) => TvBlogPost(
+    id: _firstString(json, ['id']),
+    slug: _firstString(json, ['slug']),
+    title: _firstString(json, ['title'], fallback: 'Untitled story'),
+    excerpt: _firstString(json, ['excerpt', 'summary']),
+    date: _firstString(json, ['date', 'published_at']),
+    category: _firstString(json, ['topic', 'category']),
+    author: _firstString(json, ['author'], fallback: 'Yangon TV'),
+    image: _mediaUrl(_firstString(json, ['cover', 'image', 'og_image'])),
+    content: _firstString(json, ['content']),
+  );
+}
+
 class TvSocialLink {
   const TvSocialLink({
     required this.id,
@@ -572,6 +626,7 @@ class TvNotificationEntry {
     required this.linkUrl,
     required this.createdAt,
     required this.readAt,
+    this.isLocal = false,
   });
 
   final String id;
@@ -581,6 +636,7 @@ class TvNotificationEntry {
   final String? linkUrl;
   final String? createdAt;
   final String? readAt;
+  final bool isLocal;
 
   bool get isRead => readAt != null && readAt!.isNotEmpty;
 
@@ -593,6 +649,8 @@ class TvNotificationEntry {
         linkUrl: _nullableString(json['link_url']),
         createdAt: _nullableString(json['created_at']),
         readAt: _nullableString(json['read_at']),
+        isLocal:
+            json['is_local'] == true || '${json['id']}'.startsWith('local-'),
       );
 }
 
@@ -601,11 +659,15 @@ class TvNotificationFeed {
     required this.notifications,
     required this.unreadCount,
     this.hasServerUnreadCount = true,
+    this.localUnreadCount = 0,
   });
 
   final List<TvNotificationEntry> notifications;
   final int unreadCount;
   final bool hasServerUnreadCount;
+  final int localUnreadCount;
+
+  bool get hasUnreadCount => hasServerUnreadCount || localUnreadCount > 0;
 
   factory TvNotificationFeed.fromJson(Map<String, dynamic> json) {
     final serverUnreadCount = _intValue(json['unread_count']);
@@ -707,15 +769,26 @@ class TvPaymentOrder {
 }
 
 class AuthService {
-  AuthService({http.Client? client, Future<String?> Function()? tokenReader})
-    : _client = client ?? http.Client(),
-      _tokenReader = tokenReader ?? (() => _storage.read(key: _tokenKey));
-
+  AuthService({
+    http.Client? client,
+    Future<String?> Function()? tokenReader,
+    LocalNotificationStore? localNotificationStore,
+  }) : _client = client ?? http.Client(),
+       _tokenReader = tokenReader ?? (() => _storage.read(key: _tokenKey)),
+       _localNotifications =
+           localNotificationStore ??
+           LocalNotificationStore(
+             readValue: () => _storage.read(key: _localNotificationsKey),
+             writeValue: (value) =>
+                 _storage.write(key: _localNotificationsKey, value: value),
+           );
   final http.Client _client;
   final Future<String?> Function() _tokenReader;
+  final LocalNotificationStore _localNotifications;
   static const _tokenKey = 'ygntv_customer_session_token';
   static const _userKey = 'ygntv_customer_session_user';
   static const _deviceIdKey = 'ygntv_customer_device_id';
+  static const _localNotificationsKey = 'ygntv_customer_local_notifications';
   final Uuid _uuid = const Uuid();
 
   Future<AuthSession?> restoreSession() async {
@@ -848,8 +921,11 @@ class AuthService {
     };
   }
 
-  Future<List<TvHomeBanner>> getHeroBanners({String position = 'top'}) async {
-    final response = await _get('/public/ads', query: {'position': position});
+  Future<List<TvHomeBanner>> getTopAdBanners() async {
+    final response = await _get(
+      '/public/ads',
+      query: const {'position': 'top'},
+    );
     final root = _decodeMap(response.body);
     _checkResponse(response, root);
     final banners =
@@ -873,6 +949,50 @@ class AuthService {
           });
     return banners;
   }
+
+  Future<List<TvBlogPost>> getBlogPosts({int page = 1}) async {
+    final response = await _get('/public/blogs', query: {'page': '$page'});
+    final root = _decodeMap(response.body);
+    _checkResponse(response, root);
+    return _rowsFrom(root)
+        .map(TvBlogPost.fromJson)
+        .where((post) => post.title.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<TvBlogPost> getBlogPost(String slug) async {
+    final response = await _get(
+      '/public/blogs/${Uri.encodeComponent(slug.trim())}',
+    );
+    final root = _decodeMap(response.body);
+    _checkResponse(response, root);
+    final data = _mapFrom(root);
+    if (data.isEmpty) {
+      throw const AuthException('This blog story could not be found.');
+    }
+    return TvBlogPost.fromJson(data);
+  }
+
+  Future<List<TvHomeMarqueeEntry>> getHomeMarqueeEntries() async {
+    final response = await _get(
+      '/public/ads',
+      query: const {'position': 'header_marquee'},
+    );
+    final root = _decodeMap(response.body);
+    _checkResponse(response, root);
+    return _rowsFrom(root)
+        .where(
+          (row) =>
+              _firstString(row, ['position']).toLowerCase() == 'header_marquee',
+        )
+        .map(TvHomeMarqueeEntry.fromJson)
+        .where((entry) => entry.content.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<String> getHomeMarquee() async => (await getHomeMarqueeEntries())
+      .map((entry) => entry.content)
+      .join('   •   ');
 
   Future<List<TvSocialLink>> getSocialLinks() async {
     final response = await _get('/socials');
@@ -1193,22 +1313,42 @@ class AuthService {
         .toList(growable: false);
   }
 
-  Future<void> saveContent(String contentType, int contentId) async {
+  Future<void> saveContent(
+    String contentType,
+    int contentId, {
+    String? title,
+  }) async {
     final response = await _post('/tv/library/saved', {
       'content_type': contentType,
       'content_id': contentId,
     }, authenticated: true);
     final root = _decodeMap(response.body);
     _checkResponse(response, root);
+    await recordLocalNotification(
+      title: 'Saved to My List',
+      message:
+          '“${title?.trim().isNotEmpty == true ? title : 'This title'}” was added to My List.',
+      type: 'library_saved',
+    );
   }
 
-  Future<void> removeSavedContent(String contentType, int contentId) async {
+  Future<void> removeSavedContent(
+    String contentType,
+    int contentId, {
+    String? title,
+  }) async {
     final response = await _delete(
       '/tv/library/saved/$contentType/$contentId',
       authenticated: true,
     );
     final root = _decodeMap(response.body);
     _checkResponse(response, root);
+    await recordLocalNotification(
+      title: 'Removed from My List',
+      message:
+          '“${title?.trim().isNotEmpty == true ? title : 'This title'}” was removed from My List.',
+      type: 'library_removed',
+    );
   }
 
   Future<void> updateViewingProgress({
@@ -1234,10 +1374,16 @@ class AuthService {
     final response = await _get('/tv/notifications', authenticated: true);
     final root = _decodeMap(response.body);
     _checkResponse(response, root);
-    return TvNotificationFeed.fromJson(_mapFrom(root));
+    return _mergeLocalNotifications(
+      TvNotificationFeed.fromJson(_mapFrom(root)),
+    );
   }
 
   Future<TvNotificationFeed> markNotificationRead(String id) async {
+    if (id.startsWith('local-')) {
+      await _localNotifications.markRead(id);
+      return getNotifications();
+    }
     final response = await _post(
       '/tv/notifications/${Uri.encodeComponent(id)}/read',
       const {},
@@ -1245,7 +1391,9 @@ class AuthService {
     );
     final root = _decodeMap(response.body);
     _checkResponse(response, root);
-    return TvNotificationFeed.fromJson(_mapFrom(root));
+    return _mergeLocalNotifications(
+      TvNotificationFeed.fromJson(_mapFrom(root)),
+    );
   }
 
   Future<TvNotificationFeed> markAllNotificationsRead() async {
@@ -1256,7 +1404,77 @@ class AuthService {
     );
     final root = _decodeMap(response.body);
     _checkResponse(response, root);
-    return TvNotificationFeed.fromJson(_mapFrom(root));
+    await _localNotifications.markAllRead();
+    return _mergeLocalNotifications(
+      TvNotificationFeed.fromJson(_mapFrom(root)),
+    );
+  }
+
+  Future<void> recordLocalNotification({
+    required String title,
+    required String message,
+    required String type,
+    String? linkUrl,
+  }) async {
+    try {
+      await _localNotifications.addNotification(
+        title: title,
+        message: message,
+        type: type,
+        linkUrl: linkUrl,
+      );
+    } catch (_) {
+      // Local notices must never prevent the requested app action.
+    }
+  }
+
+  Future<TvNotificationFeed> _mergeLocalNotifications(
+    TvNotificationFeed serverFeed,
+  ) async {
+    try {
+      final localRows = await _localNotifications.getNotifications();
+      final localEntries = localRows
+          .map(TvNotificationEntry.fromJson)
+          .toList(growable: false);
+      final notifications = [...serverFeed.notifications, ...localEntries];
+      notifications.sort(
+        (a, b) => _notificationDate(b).compareTo(_notificationDate(a)),
+      );
+      final localUnreadCount = localEntries
+          .where((item) => !item.isRead)
+          .length;
+      return TvNotificationFeed(
+        notifications: notifications,
+        unreadCount: serverFeed.unreadCount + localUnreadCount,
+        hasServerUnreadCount: serverFeed.hasServerUnreadCount,
+        localUnreadCount: localUnreadCount,
+      );
+    } catch (_) {
+      return serverFeed;
+    }
+  }
+
+  DateTime _notificationDate(TvNotificationEntry item) =>
+      DateTime.tryParse(item.createdAt ?? '') ??
+      DateTime.fromMillisecondsSinceEpoch(0);
+
+  Future<void> _recordDownloadOutcomes(
+    List<TvDownloadProgress> downloads,
+  ) async {
+    try {
+      await _localNotifications.recordFinishedDownloads(
+        downloads.map(
+          (download) => LocalDownloadResult(
+            id: download.id,
+            title: download.title,
+            status: download.status,
+            message: download.message,
+          ),
+        ),
+      );
+    } catch (_) {
+      // Download polling continues even when local notice storage is unavailable.
+    }
   }
 
   Future<DownloadTarget?> createDownloadTarget(
@@ -1323,6 +1541,21 @@ class AuthService {
       if (id == null) {
         throw const AuthException('Android could not start the download.');
       }
+      final title = target.fileName.replaceAll(
+        RegExp(r'\.mp4$', caseSensitive: false),
+        '',
+      );
+      try {
+        await _localNotifications.trackDownload(id);
+      } catch (_) {
+        // The Android download still succeeds if local tracking is unavailable.
+      }
+      await recordLocalNotification(
+        title: 'Download started',
+        message:
+            '“$title” is downloading. You can follow its progress in Updates.',
+        type: 'download_started',
+      );
       return id;
     } on PlatformException catch (error) {
       throw AuthException(
@@ -1338,13 +1571,15 @@ class AuthService {
   Future<List<TvDownloadProgress>> getAndroidDownloads() async {
     try {
       final rows = await _downloadChannel.invokeListMethod<dynamic>('list');
-      return (rows ?? const <dynamic>[])
+      final downloads = (rows ?? const <dynamic>[])
           .whereType<Map>()
           .map(
             (row) => TvDownloadProgress.fromMap(Map<String, dynamic>.from(row)),
           )
           .where((download) => download.id > 0)
           .toList(growable: false);
+      await _recordDownloadOutcomes(downloads);
+      return downloads;
     } on PlatformException {
       return const <TvDownloadProgress>[];
     } on MissingPluginException {
@@ -1355,6 +1590,7 @@ class AuthService {
   Future<void> dismissAndroidDownload(int id) async {
     try {
       await _downloadChannel.invokeMethod<void>('dismiss', {'id': id});
+      await _localNotifications.forgetDownload(id);
     } on PlatformException {
       // A local download notice can be dismissed again if Android is busy.
     } on MissingPluginException {
@@ -1365,6 +1601,7 @@ class AuthService {
   Future<void> deleteAndroidDownload(int id) async {
     try {
       await _downloadChannel.invokeMethod<void>('delete', {'id': id});
+      await _localNotifications.forgetDownload(id);
     } on PlatformException catch (error) {
       throw AuthException(
         error.message ?? 'The downloaded video could not be removed.',
