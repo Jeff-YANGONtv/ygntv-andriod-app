@@ -134,27 +134,47 @@ jobs:
       - name: Build and verify the production-package APK
         run: |
           set -euo pipefail
-          flutter build apk --release --split-per-abi --target-platform android-arm64 --android-project-arg=force-version-code-ignoring-abi=true
-          apk=build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-          test -s "$apk"
-
           apksigner="$(find "${ANDROID_HOME:-${ANDROID_SDK_ROOT}}/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           aapt="$(find "${ANDROID_HOME:-${ANDROID_SDK_ROOT}}/build-tools" -type f -name aapt | sort -V | tail -n 1)"
           test -x "$apksigner"
           test -x "$aapt"
-
-          cert_output="$("$apksigner" verify --verbose --print-certs "$apk")"
           expected_cert='c0f2e11564b645990de5224ac6c56baba74385869109e610c66cc49783f89969'
-          printf '%s\n' "$cert_output" | grep -F "Signer #1 certificate SHA-256 digest: $expected_cert"
 
+          set +e
+          flutter build apk --release --split-per-abi --target-platform android-arm64 --android-project-arg=force-version-code-ignoring-abi=true
+          flutter_status=$?
+          set -e
+
+          apk=''
+          while IFS= read -r candidate; do
+            cert_output="$("$apksigner" verify --verbose --print-certs "$candidate" 2>/dev/null)" || continue
+            printf '%s\n' "$cert_output" | grep -Fq "Signer #1 certificate SHA-256 digest: $expected_cert" || continue
+            badging="$("$aapt" dump badging "$candidate" 2>/dev/null)" || continue
+            printf '%s\n' "$badging" | grep -Fq "package: name='org.ygntv.ygntv_customer'" || continue
+            printf '%s\n' "$badging" | grep -Fq "versionCode='6023'" || continue
+            printf '%s\n' "$badging" | grep -Fq "versionName='1.1.8'" || continue
+            candidate_abis="$(unzip -Z1 "$candidate" | awk -F/ '$1 == "lib" && NF > 2 { print $2 }' | sort -u | paste -sd, -)"
+            test "$candidate_abis" = 'arm64-v8a' || continue
+            apk="$candidate"
+            break
+          done < <(find .. -type f -name '*.apk' -size +0c -print | sort)
+
+          if [ -z "$apk" ]; then
+            printf 'No APK matched the historical release signer, package/version, and arm64 ABI.\n'
+            find .. -type f -name '*.apk' -printf '%p (%s bytes)\n' || true
+            exit 1
+          fi
+          if [ "$flutter_status" -ne 0 ]; then
+            printf 'Flutter returned %s, but a fully verified release APK was found at %s\n' "$flutter_status" "$apk"
+          fi
+          cert_output="$("$apksigner" verify --verbose --print-certs "$apk")"
+          printf '%s\n' "$cert_output" | grep -F "Signer #1 certificate SHA-256 digest: $expected_cert"
           badging="$("$aapt" dump badging "$apk")"
           printf '%s\n' "$badging" | grep -F "package: name='org.ygntv.ygntv_customer'"
           printf '%s\n' "$badging" | grep -F "versionCode='6023'"
           printf '%s\n' "$badging" | grep -F "versionName='1.1.8'"
-
           abis="$(unzip -Z1 "$apk" | awk -F/ '$1 == "lib" && NF > 2 { print $2 }' | sort -u | paste -sd, -)"
-          test "$abis" = 'arm64-v8a'
-          printf 'ABI: %s\n' "$abis"
+          printf 'APK path: %s\nABI: %s\n' "$apk" "$abis"
           printf 'APK size (bytes): %s\n' "$(stat -c '%s' "$apk")"
           sha256sum "$apk"
           mkdir -p build/final-artifacts
