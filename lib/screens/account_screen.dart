@@ -427,32 +427,9 @@ class _ProfileCard extends StatelessWidget {
       child: Container(
         key: const ValueKey('account-profile-card-background'),
         width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF68141D), Color(0xFF8A1B28), Color(0xFF3B1118)],
-          ),
-        ),
+        decoration: const BoxDecoration(color: Color(0xFF741B25)),
         child: Stack(
           children: [
-            Positioned(
-              top: -86,
-              right: -62,
-              child: Container(
-                width: 210,
-                height: 210,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      ygntvRed.withValues(alpha: .22),
-                      ygntvRed.withValues(alpha: 0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 13, 14, 31),
               child: Column(

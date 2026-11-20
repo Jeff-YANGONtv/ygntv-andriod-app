@@ -816,9 +816,10 @@ void main() {
     final background = tester.widget<Container>(
       find.byKey(const ValueKey('account-profile-card-background')),
     );
-    final gradient =
-        (background.decoration! as BoxDecoration).gradient! as LinearGradient;
-    expect(gradient.colors[1], const Color(0xFF8A1B28));
+    final decoration = background.decoration! as BoxDecoration;
+    expect(decoration.color, const Color(0xFF741B25));
+    expect(decoration.color!.a, 1.0);
+    expect(decoration.gradient, isNull);
 
     final dailyBonus = find.text('Daily Sign In Bonus');
     expect(dailyBonus, findsOneWidget);
