@@ -23,6 +23,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   late Future<TvNotificationFeed> _feed;
   TvNotificationFeed? _lastKnownFeed;
   List<TvDownloadProgress> _downloads = const [];
+  final Set<int> _knownCompletedDownloadIds = {};
   Timer? _downloadTimer;
   Timer? _notificationTimer;
   bool _busy = false;
@@ -116,20 +117,16 @@ class _NotificationsScreenState extends State<NotificationsScreen>
 
   Future<void> _refreshDownloads() async {
     final downloads = await widget.service.getAndroidDownloads();
+    final completedIds = downloads
+        .where((download) => download.status == 'complete')
+        .map((download) => download.id)
+        .toSet();
+    final hasNewCompletion = completedIds.difference(
+      _knownCompletedDownloadIds,
+    ).isNotEmpty;
+    _knownCompletedDownloadIds.addAll(completedIds);
     if (mounted) setState(() => _downloads = downloads);
-  }
-
-  Future<void> _dismissDownload(TvDownloadProgress download) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await widget.service.dismissAndroidDownload(download.id);
-      await _refreshDownloads();
-    } catch (error) {
-      if (mounted) _message(error.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    if (hasNewCompletion && mounted) await _syncNotifications();
   }
 
   Future<void> _playDownloadedVideo(TvDownloadProgress download) async {
@@ -174,7 +171,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   }
 
   Future<void> _markAll(TvNotificationFeed feed) async {
-    if (feed.unreadCount == 0 || _busy) return;
+    if (feed.visibleUnreadCount == 0 || _busy) return;
     setState(() => _busy = true);
     try {
       final next = await widget.service.markAllNotificationsRead();
@@ -212,6 +209,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       );
       return;
     }
+    if (_isLocalDownloadComplete(item)) {
+      for (final download in _downloads) {
+        if (download.status == 'complete' &&
+            item.message.contains(download.title)) {
+          await _playDownloadedVideo(download);
+          return;
+        }
+      }
+    }
     await _openLink(item.linkUrl);
   }
 
@@ -224,6 +230,16 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         type.contains('supportreply') ||
         type.contains('customersupport') ||
         item.title.toLowerCase().contains('customer support reply');
+  }
+
+  bool _isLocalDownloadComplete(TvNotificationEntry item) {
+    final normalizedType = (item.type ?? '').toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9]'),
+      '',
+    );
+    return item.isLocal &&
+        (normalizedType == 'downloadcomplete' ||
+            normalizedType == 'downloadcompleted');
   }
 
   void _message(String text) {
@@ -271,13 +287,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             );
           }
           final feed = snapshot.data!;
-          final hasUnreadItems = feed.notifications.any((item) => !item.isRead);
+          final notifications = feed.visibleNotifications;
+          final hasUnreadItems = notifications.any((item) => !item.isRead);
           final summary = [
-            if (feed.hasUnreadCount && feed.unreadCount > 0)
-              '${feed.unreadCount} unread',
-            if (_downloads.isNotEmpty) '${_downloads.length} downloads',
+            if (notifications.any((item) => !item.isRead))
+              '${notifications.where((item) => !item.isRead).length} unread',
           ].join(' · ');
-          if (feed.notifications.isEmpty && _downloads.isEmpty) {
+          if (notifications.isEmpty) {
             return const _ScrollableState(
               child: _InfoState(
                 icon: Icons.notifications_none_rounded,
@@ -290,7 +306,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           return ListView.separated(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 11, 16, 28),
-            itemCount: feed.notifications.length + _downloads.length + 1,
+            itemCount: notifications.length + 1,
             separatorBuilder: (_, index) => index == 0
                 ? const SizedBox(height: 8)
                 : const SizedBox(height: 10),
@@ -312,21 +328,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                   ],
                 );
               }
-              final downloadIndex = index - 1;
-              if (downloadIndex < _downloads.length) {
-                final download = _downloads[downloadIndex];
-                return _DownloadCard(
-                  download: download,
-                  onPlay: download.status == 'complete'
-                      ? () => _playDownloadedVideo(download)
-                      : null,
-                  onDismiss: download.status != 'failed' || _busy
-                      ? null
-                      : () => _dismissDownload(download),
-                );
-              }
-              final item =
-                  feed.notifications[downloadIndex - _downloads.length];
+              final item = notifications[index - 1];
               return _NotificationCard(
                 item: item,
                 onTap: () => _openNotification(item),
@@ -423,119 +425,6 @@ class _NotificationCard extends StatelessWidget {
       ),
     ),
   );
-}
-
-class _DownloadCard extends StatelessWidget {
-  const _DownloadCard({
-    required this.download,
-    required this.onPlay,
-    required this.onDismiss,
-  });
-
-  final TvDownloadProgress download;
-  final VoidCallback? onPlay;
-  final VoidCallback? onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = download.progress;
-    final active = download.isActive;
-    final complete = download.status == 'complete';
-    final failed = download.status == 'failed';
-    final subtitle = active && progress != null
-        ? '${download.statusLabel} · ${(progress * 100).round()}%'
-        : download.statusLabel;
-
-    return Material(
-      color: const Color(0xFF1D2027),
-      borderRadius: BorderRadius.circular(17),
-      child: InkWell(
-        onTap: onPlay,
-        borderRadius: BorderRadius.circular(17),
-        child: Padding(
-          padding: const EdgeInsets.all(15),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                complete
-                    ? Icons.check_circle_outline_rounded
-                    : failed
-                    ? Icons.error_outline_rounded
-                    : Icons.downloading_rounded,
-                color: complete
-                    ? const Color(0xFF81D398)
-                    : failed
-                    ? const Color(0xFFFFA6AC)
-                    : ygntvGold,
-                size: 20,
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      download.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: failed ? const Color(0xFFFFA6AC) : ygntvMuted,
-                        fontSize: 10,
-                      ),
-                    ),
-                    if (download.message != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        download.message!,
-                        style: const TextStyle(color: ygntvMuted, fontSize: 9),
-                      ),
-                    ],
-                    if (active) ...[
-                      const SizedBox(height: 9),
-                      LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 4,
-                        borderRadius: BorderRadius.circular(8),
-                        backgroundColor: Colors.white12,
-                        color: ygntvRed,
-                      ),
-                    ],
-                    if (complete) ...[
-                      const SizedBox(height: 5),
-                      const Text(
-                        'Tap to play offline',
-                        style: TextStyle(
-                          color: ygntvGold,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (onDismiss != null)
-                IconButton(
-                  tooltip: 'Dismiss download notice',
-                  onPressed: onDismiss,
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                  visualDensity: VisualDensity.compact,
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _ScrollableState extends StatelessWidget {

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import 'auth/auth_controller.dart';
 import 'auth/auth_service.dart';
+import 'auth/screen_time_tracker.dart';
 import 'deep_links/app_deep_link.dart';
 import 'screens/customer_home_screen.dart';
 import 'screens/sign_in_screen.dart';
@@ -39,7 +40,8 @@ class YgntvCustomerApp extends StatefulWidget {
   State<YgntvCustomerApp> createState() => _YgntvCustomerAppState();
 }
 
-class _YgntvCustomerAppState extends State<YgntvCustomerApp> {
+class _YgntvCustomerAppState extends State<YgntvCustomerApp>
+    with WidgetsBindingObserver {
   final AppLinks _appLinks = AppLinks();
   final ValueNotifier<AppDeepLink?> _deepLinkEvent =
       ValueNotifier<AppDeepLink?>(null);
@@ -47,11 +49,19 @@ class _YgntvCustomerAppState extends State<YgntvCustomerApp> {
   AppDeepLink? _pendingLink;
   String? _lastUri;
   DateTime? _lastUriAt;
+  late ScreenTimeTracker _screenTimeTracker;
 
   @override
   void initState() {
     super.initState();
-    widget.controller.addListener(_dispatchPendingLink);
+    _screenTimeTracker = ScreenTimeTracker(service: widget.controller.service);
+    widget.controller.beforeSignOut = _screenTimeTracker.stopForSignOut;
+    widget.controller.addListener(_handleControllerChanged);
+    WidgetsBinding.instance.addObserver(this);
+    _screenTimeTracker.setAppVisible(
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
+    );
+    unawaited(_screenTimeTracker.setUserId(widget.controller.session?.userId));
     _linkSubscription = _appLinks.uriLinkStream.listen(
       _receiveUri,
       onError: (_) {},
@@ -59,13 +69,31 @@ class _YgntvCustomerAppState extends State<YgntvCustomerApp> {
     unawaited(_receiveInitialUri());
   }
 
+  void _handleControllerChanged() {
+    unawaited(_screenTimeTracker.setUserId(widget.controller.session?.userId));
+    _dispatchPendingLink();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _screenTimeTracker.setAppVisible(state == AppLifecycleState.resumed);
+  }
+
   @override
   void didUpdateWidget(covariant YgntvCustomerApp oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_dispatchPendingLink);
-      widget.controller.addListener(_dispatchPendingLink);
-      _dispatchPendingLink();
+      oldWidget.controller.removeListener(_handleControllerChanged);
+      oldWidget.controller.beforeSignOut = null;
+      unawaited(_screenTimeTracker.dispose());
+      _screenTimeTracker = ScreenTimeTracker(service: widget.controller.service);
+      widget.controller.beforeSignOut = _screenTimeTracker.stopForSignOut;
+      widget.controller.addListener(_handleControllerChanged);
+      _screenTimeTracker.setAppVisible(
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
+      );
+      unawaited(_screenTimeTracker.setUserId(widget.controller.session?.userId));
+      _handleControllerChanged();
     }
   }
 
@@ -115,7 +143,10 @@ class _YgntvCustomerAppState extends State<YgntvCustomerApp> {
 
   @override
   void dispose() {
-    widget.controller.removeListener(_dispatchPendingLink);
+    widget.controller.removeListener(_handleControllerChanged);
+    widget.controller.beforeSignOut = null;
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_screenTimeTracker.dispose());
     final subscription = _linkSubscription;
     if (subscription != null) unawaited(subscription.cancel());
     _deepLinkEvent.dispose();

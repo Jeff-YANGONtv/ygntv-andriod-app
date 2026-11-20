@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../auth/auth_service.dart';
 import '../widgets/ygntv_brand.dart';
-import 'library_screen.dart';
+import 'daily_signin_wheel_screen.dart';
 import 'follow_us_screen.dart';
-import 'notifications_screen.dart';
+import 'referral_wallet_screen.dart';
 import 'subscription_screen.dart';
 import 'support_chat_screen.dart';
 
@@ -38,7 +39,9 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Future<void> _reload() async {
     final next = widget.service.getProfile();
-    setState(() => _profile = next);
+    setState(() {
+      _profile = next;
+    });
     try {
       await next;
     } catch (_) {}
@@ -74,7 +77,14 @@ class _AccountScreenState extends State<AccountScreen> {
         if (mounted) _message('Device removed.');
       }
     } catch (error) {
-      if (mounted) _message(error.toString());
+      if (mounted) {
+        _message(
+          _englishAccountError(
+            error,
+            'Could not remove the device. Please try again.',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -86,372 +96,665 @@ class _AccountScreenState extends State<AccountScreen> {
       ..showSnackBar(SnackBar(content: Text(value)));
   }
 
+  Future<void> _copyUid() async {
+    final uid = widget.session.userId.trim();
+    if (uid.isEmpty) return;
+    try {
+      await Clipboard.setData(ClipboardData(text: uid));
+      if (mounted) _message('UID copied.');
+    } catch (_) {
+      if (mounted) _message('Could not copy UID.');
+    }
+  }
+
   void _open(Widget page) =>
       Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => page));
 
   @override
-  Widget build(BuildContext context) => RefreshIndicator(
-    color: ygntvRed,
-    onRefresh: _reload,
-    child: ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
-      children: [
-        const Text(
-          'Account',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+  Widget build(BuildContext context) => ColoredBox(
+    color: Colors.black,
+    child: RefreshIndicator(
+      color: ygntvRed,
+      onRefresh: _reload,
+      child: ListView(
+        key: const PageStorageKey<String>('account-profile-scroll'),
+        primary: false,
+        physics: const AlwaysScrollableScrollPhysics(),
+        // Leave room to scroll the final interactive card clear of the fixed
+        // CustomerHome navigation bar and the device's system navigation inset.
+        padding: EdgeInsets.fromLTRB(
+          14,
+          8,
+          14,
+          28 + 67 + MediaQuery.of(context).viewPadding.bottom,
         ),
-        const SizedBox(height: 16),
-        FutureBuilder<TvProfileData>(
-          future: _profile,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const _Panel(
-                child: SizedBox(
-                  height: 112,
-                  child: Center(
-                    child: CircularProgressIndicator(color: ygntvRed),
+        children: [
+          const Text(
+            'Account',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          FutureBuilder<TvProfileData>(
+            future: _profile,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return _ProfileCard(
+                  session: widget.session,
+                  onCopyUid: _copyUid,
+                  isLoading: true,
+                );
+              }
+              if (snapshot.hasError) {
+                return _ProfileCard(
+                  session: widget.session,
+                  errorMessage: 'Could not refresh account details. Showing your signed-in account info.',
+                  onRetry: _reload,
+                  onCopyUid: _copyUid,
+                );
+              }
+              return _ProfileCard(
+                profile: snapshot.data!,
+                session: widget.session,
+                onCopyUid: _copyUid,
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _GridActionTile(
+                    icon: Icons.workspace_premium_rounded,
+                    key: const ValueKey('account-action-subscription'),
+                    title: 'Subscription',
+                    subtitle: 'Plans & membership codes.',
+                    onTap: () =>
+                        _open(SubscriptionScreen(service: widget.service)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _GridActionTile(
+                    icon: Icons.system_update_rounded,
+                    key: const ValueKey('account-action-update'),
+                    title: 'App Update',
+                    subtitle: 'Check the latest app version.',
+                    onTap: () => widget.onCheckForUpdates?.call(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _GridActionTile(
+                    icon: Icons.redeem_rounded,
+                    key: const ValueKey('account-action-referral'),
+                    title: 'Refer & Earn',
+                    subtitle: '500 Ks/month per invited Premium member.',
+                    onTap: () =>
+                        _open(ReferralWalletScreen(service: widget.service)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _GridActionTile(
+                    icon: Icons.card_giftcard_rounded,
+                    key: const ValueKey('account-action-lucky-box'),
+                    title: 'Daily Sign In Bonus (Lucky Box)',
+                    subtitle: 'Choose your reward within 24 hours.',
+                    onTap: () =>
+                        _open(DailySignInWheelScreen(service: widget.service)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          _ActionTile(
+            icon: Icons.headset_mic_rounded,
+            title: 'Help & Support (24/7)',
+            subtitle: 'Chat with YGNTV customer care anytime.',
+            onTap: () => _open(SupportChatScreen(service: widget.service)),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text(
+                'Connect With Us',
+                style: TextStyle(
+                  color: ygntvMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Divider(
+                  color: Colors.white.withValues(alpha: .16),
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          _ActionTile(
+            icon: Icons.public_rounded,
+            title: 'Follow Us',
+            subtitle: 'Official YGNTV social links',
+            onTap: () => _open(FollowUsScreen(service: widget.service)),
+          ),
+          const SizedBox(height: 8),
+          FutureBuilder<TvProfileData>(
+            future: _profile,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const _Panel(child: SizedBox(height: 40));
+                }
+                return const SizedBox.shrink();
+              }
+              final minutes = snapshot.data!.screenTimeLast30DaysSeconds ~/ 60;
+              final duration = minutes >= 60
+                  ? '${minutes ~/ 60} hr ${minutes % 60} min'
+                  : '$minutes min';
+              return KeyedSubtree(
+                key: const ValueKey('account-screen-time-card'),
+                child: _Panel(
+                  child: Row(
+                    children: [
+                      const _AccountIconBadge(
+                        icon: Icons.schedule_rounded,
+                        size: 36,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'In-app screen time · last 30 days',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '$duration · YGNTV open time only; other apps are not tracked.',
+                              style: const TextStyle(
+                                color: ygntvMuted,
+                                fontSize: 9.5,
+                                height: 1.25,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               );
-            }
-            if (snapshot.hasError) {
-              return _Panel(
-                child: Column(
-                  children: [
-                    const Icon(
-                      Icons.wifi_off_rounded,
-                      color: ygntvGold,
-                      size: 28,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('Account details are unavailable.'),
-                    const SizedBox(height: 6),
-                    Text(
-                      snapshot.error.toString(),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: ygntvMuted, fontSize: 10),
-                    ),
-                    TextButton(
-                      onPressed: _reload,
-                      child: const Text('Try again'),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return _ProfileCard(
-              profile: snapshot.data!,
-              session: widget.session,
-            );
-          },
-        ),
-        const SizedBox(height: 12),
-        FutureBuilder<TvProfileData>(
-          future: _profile,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return const SizedBox.shrink();
-            return _MembershipCard(entitlement: snapshot.data!.entitlement);
-          },
-        ),
-        const SizedBox(height: 15),
-        const Text(
-          'YOUR YGNTV',
-          style: TextStyle(
-            color: ygntvMuted,
-            fontSize: 9,
-            letterSpacing: 1.4,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 7),
-        _ActionTile(
-          icon: Icons.video_library_outlined,
-          title: 'My Library',
-          subtitle: 'Continue watching, history, and My List',
-          onTap: () => _open(LibraryScreen(service: widget.service)),
-        ),
-        _ActionTile(
-          icon: Icons.notifications_none_rounded,
-          title: 'YGNTV Updates',
-          subtitle: 'Announcements and account notifications',
-          onTap: () => _open(NotificationsScreen(service: widget.service)),
-        ),
-        _ActionTile(
-          icon: Icons.workspace_premium_outlined,
-          title: 'Premium membership',
-          subtitle: 'Current plans, prices, and code redemption',
-          onTap: () => _open(SubscriptionScreen(service: widget.service)),
-        ),
-        if (widget.onCheckForUpdates != null) ...[
-          const SizedBox(height: 9),
-          const Text(
-            'APP',
-            style: TextStyle(
-              color: ygntvMuted,
-              fontSize: 9,
-              letterSpacing: 1.4,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 7),
-          _ActionTile(
-            icon: Icons.system_update_alt_rounded,
-            title: 'Check for app updates',
-            subtitle: 'Check for the latest private TEST build',
-            onTap: () {
-              widget.onCheckForUpdates?.call();
             },
           ),
-        ],
-        const SizedBox(height: 9),
-        const Text(
-          'HELP & SUPPORT',
-          style: TextStyle(
-            color: ygntvMuted,
-            fontSize: 9,
-            letterSpacing: 1.4,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 7),
-        _ActionTile(
-          icon: Icons.support_agent_rounded,
-          title: 'Help & Support',
-          subtitle: 'Chat with the YGNTV customer care team',
-          onTap: () => _open(SupportChatScreen(service: widget.service)),
-        ),
-        const SizedBox(height: 15),
-        const Text(
-          'CONNECT',
-          style: TextStyle(
-            color: ygntvMuted,
-            fontSize: 9,
-            letterSpacing: 1.4,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 7),
-        _ActionTile(
-          icon: Icons.share_rounded,
-          title: 'Follow Us',
-          subtitle: 'Official YGNTV social links',
-          onTap: () => _open(FollowUsScreen(service: widget.service)),
-        ),
-        const SizedBox(height: 15),
-        FutureBuilder<TvProfileData>(
-          future: _profile,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return const SizedBox.shrink();
-            final devices = snapshot.data!.devices;
-            return _Panel(
-              padding: EdgeInsets.zero,
-              child: ExpansionTile(
-                tilePadding: const EdgeInsets.symmetric(horizontal: 15),
-                childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                leading: const Icon(Icons.devices_rounded, color: ygntvGold),
-                title: const Text(
-                  'Signed-in devices',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-                ),
-                subtitle: Text(
-                  '${devices.length} active ${devices.length == 1 ? 'device' : 'devices'}',
-                  style: const TextStyle(color: ygntvMuted, fontSize: 10),
-                ),
-                children: devices.isEmpty
-                    ? [
-                        const Padding(
-                          padding: EdgeInsets.all(10),
-                          child: Text(
-                            'No active device records.',
-                            style: TextStyle(color: ygntvMuted, fontSize: 11),
-                          ),
-                        ),
-                      ]
-                    : devices
-                          .map(
-                            (device) => ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                              ),
-                              leading: const Icon(
-                                Icons.smartphone_rounded,
-                                size: 19,
-                                color: ygntvMuted,
-                              ),
-                              title: Text(
-                                device.name,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              subtitle: Text(
-                                [
-                                  device.platform,
-                                  device.appVersion,
-                                  if (device.lastSeenAt.isNotEmpty)
-                                    'Seen ${_formatDate(device.lastSeenAt)}',
-                                ].where((part) => part.isNotEmpty).join(' · '),
-                                style: const TextStyle(
-                                  color: ygntvMuted,
-                                  fontSize: 9,
-                                ),
-                              ),
-                              trailing: IconButton(
-                                tooltip: 'Revoke device',
-                                onPressed: _busy ? null : () => _revoke(device),
-                                icon: const Icon(
-                                  Icons.remove_circle_outline_rounded,
-                                  color: Color(0xFFFFA6AC),
-                                  size: 19,
-                                ),
-                              ),
+          const SizedBox(height: 15),
+          FutureBuilder<TvProfileData>(
+            future: _profile,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData &&
+                  snapshot.connectionState == ConnectionState.waiting) {
+                return const _Panel(
+                  padding: EdgeInsets.zero,
+                  child: SizedBox(height: 72),
+                );
+              }
+              if (!snapshot.hasData) return const SizedBox.shrink();
+              final profile = snapshot.data!;
+              final devices = profile.devices;
+              return _Panel(
+                padding: EdgeInsets.zero,
+                child: ExpansionTile(
+                  key: const PageStorageKey<String>(
+                    'account-signed-in-devices',
+                  ),
+                  expansionAnimationStyle: AnimationStyle.noAnimation,
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+                  childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  leading: const _AccountIconBadge(
+                    icon: Icons.devices_other_rounded,
+                    size: 36,
+                  ),
+                  title: const Text(
+                    'Logged In Device',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                  ),
+                  subtitle: Text(
+                    '${devices.length} of ${profile.deviceLimit} allowed devices signed in',
+                    style: const TextStyle(color: ygntvMuted, fontSize: 9.5),
+                  ),
+                  children: devices.isEmpty
+                      ? [
+                          const Padding(
+                            padding: EdgeInsets.all(10),
+                            child: Text(
+                              'No active device records.',
+                              style: TextStyle(color: ygntvMuted, fontSize: 11),
                             ),
-                          )
-                          .toList(),
+                          ),
+                        ]
+                      : devices
+                            .map(
+                              (device) => ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                ),
+                                leading: const _AccountIconBadge(
+                                  icon: Icons.smartphone_rounded,
+                                  size: 30,
+                                ),
+                                title: Text(
+                                  device.name,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  [
+                                    device.platform,
+                                    device.appVersion,
+                                    if (device.lastSeenAt.isNotEmpty)
+                                      'Seen ${_formatDate(device.lastSeenAt)}',
+                                  ].where((part) => part.isNotEmpty).join(' · '),
+                                  style: const TextStyle(
+                                    color: ygntvMuted,
+                                    fontSize: 8.5,
+                                  ),
+                                ),
+                                trailing: IconButton(
+                                  tooltip: 'Revoke device',
+                                  onPressed: _busy
+                                      ? null
+                                      : () => _revoke(device),
+                                  icon: const Icon(
+                                    Icons.phonelink_erase_rounded,
+                                    color: Color(0xFFFFA6AC),
+                                    size: 19,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: () => widget.onSignOut(),
+            icon: const Icon(Icons.logout_rounded),
+            label: const Text('Sign Out'),
+            style: FilledButton.styleFrom(
+              foregroundColor: Colors.white,
+              backgroundColor: const Color(0xFFB81724),
+              minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
-            );
-          },
-        ),
-        const SizedBox(height: 18),
-        OutlinedButton.icon(
-          onPressed: () => widget.onSignOut(),
-          icon: const Icon(Icons.logout_rounded),
-          label: const Text('Sign out'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFFFFA6AC),
-            side: const BorderSide(color: Color(0x66E5454F)),
-            minimumSize: const Size.fromHeight(49),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'TEST BUILD · Private Android customer app · YGNTV.org',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Color(0xFF74717B), fontSize: 9),
-        ),
-      ],
+          const SizedBox(height: 8),
+          const Text(
+            'TEST BUILD · Private Android customer app · YGNTV.org',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFF74717B), fontSize: 9),
+          ),
+        ],
+      ),
     ),
   );
 }
 
 class _ProfileCard extends StatelessWidget {
-  const _ProfileCard({required this.profile, required this.session});
-  final TvProfileData profile;
+  const _ProfileCard({
+    required this.session,
+    this.profile,
+    this.errorMessage,
+    this.onRetry,
+    this.onCopyUid,
+    this.isLoading = false,
+  });
+  final TvProfileData? profile;
   final AuthSession session;
+  final String? errorMessage;
+  final VoidCallback? onRetry;
+  final VoidCallback? onCopyUid;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
-    final name = profile.displayName.isNotEmpty
-        ? profile.displayName
-        : session.name;
-    final email = profile.email.isNotEmpty ? profile.email : session.email;
-    return _Panel(
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 27,
-            backgroundColor: ygntvRed.withValues(alpha: .18),
-            child: Text(
-              name.trim().isEmpty
-                  ? 'Y'
-                  : name.trim().characters.first.toUpperCase(),
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-            ),
+    final profileName = profile?.name.trim();
+    final usableProfileName = profileName == 'Yangon TV viewer'
+        ? ''
+        : (profileName ?? '');
+    final sessionName = session.name.trim();
+    final usableSessionName = sessionName == 'Yangon TV viewer'
+        ? ''
+        : sessionName;
+    final name = usableProfileName.isNotEmpty
+        ? usableProfileName
+        : usableSessionName;
+    final profileEmail = profile?.email.trim();
+    final email = profileEmail != null && profileEmail.isNotEmpty
+        ? profileEmail
+        : session.email.trim();
+    final heading = name.isNotEmpty
+        ? name
+        : (email.isNotEmpty ? email : 'Your Account');
+    final initialSource = name.isNotEmpty
+        ? name
+        : (email.isNotEmpty ? email : 'U');
+    final uid = session.userId.trim();
+
+    return ClipRRect(
+      key: const ValueKey('account-profile-card'),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF1B1A20), Color(0xFF151217), Color(0xFF241116)],
           ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
+          border: Border.all(color: ygntvGold.withValues(alpha: .24)),
+          boxShadow: [
+            BoxShadow(
+              color: ygntvRed.withValues(alpha: .12),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -72,
+              right: -54,
+              child: Container(
+                width: 200,
+                height: 200,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      ygntvRed.withValues(alpha: .20),
+                      ygntvRed.withValues(alpha: 0),
+                    ],
                   ),
                 ),
-                if (email.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    email,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: ygntvMuted, fontSize: 10),
-                  ),
-                ],
-              ],
+              ),
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'ACCOUNT PROFILE',
+                        style: TextStyle(
+                          color: ygntvGold,
+                          fontSize: 9,
+                          letterSpacing: 1.35,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (isLoading)
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: ygntvRed,
+                            strokeWidth: 2,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 66,
+                          height: 66,
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [ygntvGold, ygntvRed],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: ygntvRed.withValues(alpha: .22),
+                                blurRadius: 14,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: CircleAvatar(
+                            key: const ValueKey('account-profile-avatar'),
+                            backgroundColor: const Color(0xFF19191F),
+                            child: Text(
+                              initialSource.characters.first.toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 25,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        heading,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'YGNTV MEMBER',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: ygntvMuted,
+                          fontSize: 9,
+                          letterSpacing: 1,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (email.isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          email,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: ygntvMuted,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                      if (uid.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'UID: $uid',
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: ygntvGold,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Copy UID',
+                              onPressed: onCopyUid,
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(
+                                width: 30,
+                                height: 30,
+                              ),
+                              icon: const Icon(
+                                Icons.copy_rounded,
+                                color: ygntvGold,
+                                size: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      errorMessage!,
+                      style: const TextStyle(color: ygntvMuted, fontSize: 11),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: onRetry,
+                        child: const Text('Retry'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _MembershipCard extends StatelessWidget {
-  const _MembershipCard({required this.entitlement});
-  final TvEntitlement entitlement;
+class _GridActionTile extends StatelessWidget {
+  const _GridActionTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final active = entitlement.active;
-    return _Panel(
-      child: Row(
-        children: [
-          Icon(
-            active
-                ? Icons.workspace_premium_rounded
-                : Icons.lock_outline_rounded,
-            color: active ? ygntvGold : ygntvMuted,
-            size: 22,
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  active
-                      ? (entitlement.planLabel ?? 'Premium active')
-                      : 'No active Premium membership',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
+  Widget build(BuildContext context) => Material(
+    color: ygntvPanel,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: BorderSide(color: ygntvGold.withValues(alpha: .16)),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 68),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Row(
+            children: [
+              _AccountIconBadge(icon: icon, size: 36),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        height: 1.15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: ygntvMuted,
+                        fontSize: 10,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  active && entitlement.validUntil != null
-                      ? 'Valid through ${_formatDate(entitlement.validUntil!)}'
-                      : active
-                      ? 'Your account can stream protected titles.'
-                      : 'Premium titles require an active entitlement.',
-                  style: const TextStyle(
-                    color: ygntvMuted,
-                    fontSize: 10,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 3),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: ygntvRed,
+                size: 18,
+              ),
+            ],
           ),
-          if (active)
-            const Icon(
-              Icons.check_circle_rounded,
-              color: Color(0xFF81D398),
-              size: 18,
-            ),
-        ],
+        ),
       ),
-    );
-  }
+    ),
+  );
+}
+
+class _AccountIconBadge extends StatelessWidget {
+  const _AccountIconBadge({required this.icon, this.size = 36});
+
+  final IconData icon;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(size * .32),
+      color: const Color(0xFF2A1D17),
+      border: Border.all(color: ygntvGold.withValues(alpha: .3)),
+    ),
+    child: Icon(icon, color: ygntvGold, size: size * .6),
+  );
 }
 
 class _ActionTile extends StatelessWidget {
@@ -468,30 +771,39 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: 8),
+    margin: EdgeInsets.zero,
     child: Material(
       color: ygntvPanel,
-      borderRadius: BorderRadius.circular(15),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: ygntvGold.withValues(alpha: .15)),
+      ),
       clipBehavior: Clip.antiAlias,
       child: ListTile(
         onTap: onTap,
-        leading: Icon(icon, color: ygntvGold),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        minVerticalPadding: 7,
+        leading: _AccountIconBadge(icon: icon, size: 36),
         title: Text(
           title,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
         ),
         subtitle: Text(
           subtitle,
-          style: const TextStyle(color: ygntvMuted, fontSize: 9),
+          style: const TextStyle(color: ygntvMuted, fontSize: 10),
         ),
-        trailing: const Icon(Icons.chevron_right_rounded, color: ygntvMuted),
+        trailing: const Icon(
+          Icons.chevron_right_rounded,
+          color: ygntvRed,
+          size: 20,
+        ),
       ),
     ),
   );
 }
 
 class _Panel extends StatelessWidget {
-  const _Panel({required this.child, this.padding = const EdgeInsets.all(15)});
+  const _Panel({required this.child, this.padding = const EdgeInsets.all(12)});
   final Widget child;
   final EdgeInsetsGeometry padding;
 
@@ -499,8 +811,8 @@ class _Panel extends StatelessWidget {
   Widget build(BuildContext context) => Material(
     color: ygntvPanel,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(17),
-      side: BorderSide(color: Colors.white.withValues(alpha: .06)),
+      borderRadius: BorderRadius.circular(19),
+      side: BorderSide(color: ygntvGold.withValues(alpha: .12)),
     ),
     clipBehavior: Clip.antiAlias,
     child: Padding(padding: padding, child: child),
@@ -511,4 +823,13 @@ String _formatDate(String value) {
   final date = DateTime.tryParse(value);
   if (date == null) return value;
   return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+}
+
+String _englishAccountError(Object error, String fallback) {
+  final message = error is AuthException ? error.message : '$error';
+  final clean = message.replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
+  return clean.isEmpty ||
+          RegExp(r'[\u1000-\u109F\uAA60-\uAA7F]').hasMatch(clean)
+      ? fallback
+      : clean;
 }

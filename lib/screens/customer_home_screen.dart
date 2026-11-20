@@ -612,12 +612,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
           constraints: const BoxConstraints.tightFor(width: 42, height: 42),
           icon: Badge(
             isLabelVisible:
-                (_notificationFeed?.hasUnreadCount ?? false) &&
-                (_notificationFeed?.unreadCount ?? 0) > 0,
+                (_notificationFeed?.visibleUnreadCount ?? 0) > 0,
             label: Text(
-              (_notificationFeed?.unreadCount ?? 0) > 99
+              (_notificationFeed?.visibleUnreadCount ?? 0) > 99
                   ? '99+'
-                  : '${_notificationFeed?.unreadCount ?? 0}',
+                  : '${_notificationFeed?.visibleUnreadCount ?? 0}',
             ),
             child: const Icon(
               Icons.notifications_none_rounded,
@@ -1241,94 +1240,136 @@ class _ContinueCard extends StatelessWidget {
         : 0.0;
     return SizedBox(
       width: 245,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(9),
-          decoration: BoxDecoration(
-            color: ygntvPanel,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: .05)),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: ValueKey(
+            'continue-card-${entry.contentType}-${entry.contentId}',
           ),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(9),
-                child: SizedBox(
-                  width: 76,
-                  height: 112,
-                  child: entry.posterUrl.isEmpty
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(13),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(13),
+            child: Container(
+              decoration: BoxDecoration(
+                color: ygntvPanel,
+                border: Border.all(color: Colors.white.withValues(alpha: .08)),
+              ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  entry.posterUrl.isEmpty
                       ? const _PosterFallback()
                       : ResilientNetworkImage(
                           url: entry.posterUrl,
                           fit: BoxFit.cover,
-                          cacheWidth: 185,
+                          cacheWidth: 500,
                           tmdbMaxWidth: 500,
                           fallback: const _PosterFallback(),
                         ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      entry.contentType == 'episode'
-                          ? 'SERIES EPISODE'
-                          : 'MOVIE',
-                      style: const TextStyle(
-                        color: ygntvGold,
-                        fontSize: 8,
-                        letterSpacing: .7,
-                        fontWeight: FontWeight.w800,
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0x22000000),
+                          Color(0x16000000),
+                          Color(0xE6000000),
+                        ],
+                        stops: [0, .43, 1],
                       ),
                     ),
-                    const SizedBox(height: 5),
-                    Text(
-                      entry.title,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        height: 1.25,
-                        fontWeight: FontWeight.w800,
+                  ),
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
                       ),
-                    ),
-                    const Spacer(),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 4,
-                        backgroundColor: Colors.white12,
-                        valueColor: const AlwaysStoppedAnimation(ygntvRed),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: .74),
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(color: Colors.white24),
                       ),
-                    ),
-                    const SizedBox(height: 5),
-                    const Row(
-                      children: [
-                        Icon(
-                          Icons.play_arrow_rounded,
-                          color: ygntvRed,
-                          size: 14,
+                      child: Text(
+                        entry.contentType == 'episode' ? 'SERIES' : 'MOVIE',
+                        style: const TextStyle(
+                          color: ygntvGold,
+                          fontSize: 9,
+                          letterSpacing: .7,
+                          fontWeight: FontWeight.w800,
                         ),
-                        SizedBox(width: 2),
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: ygntvRed.withValues(alpha: .94),
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 10,
+                    right: 10,
+                    bottom: 12,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Text(
-                          'Resume',
-                          style: TextStyle(
-                            fontSize: 9,
+                          entry.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            height: 1.15,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
+                        if (entry.year.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            entry.year,
+                            style: const TextStyle(
+                              color: Color(0xFFC7C3CD),
+                              fontSize: 9,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: LinearProgressIndicator(
+                      key: ValueKey(
+                        'continue-progress-${entry.contentType}-${entry.contentId}',
+                      ),
+                      value: progress,
+                      minHeight: 4,
+                      backgroundColor: Colors.white24,
+                      valueColor: const AlwaysStoppedAnimation(ygntvRed),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

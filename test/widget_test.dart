@@ -40,11 +40,13 @@ class _FakeCustomerService extends AuthService {
       unreadCount: 0,
     ),
     this.marqueeEntries = const [],
+    this.continueEntries = const [],
   }) : super(client: MockClient((_) async => http.Response('{}', 200)));
 
   final List<PaymentAccount> paymentAccounts;
   final TvNotificationFeed notificationFeed;
   final List<TvHomeMarqueeEntry> marqueeEntries;
+  final List<TvLibraryEntry> continueEntries;
   int supportStarts = 0;
   int supportSends = 0;
   int paymentAccountCalls = 0;
@@ -106,7 +108,7 @@ class _FakeCustomerService extends AuthService {
   }) async => const [];
 
   @override
-  Future<List<TvLibraryEntry>> getContinueWatching() async => const [];
+  Future<List<TvLibraryEntry>> getContinueWatching() async => continueEntries;
 
   @override
   Future<TvNotificationFeed> getNotifications() async => notificationFeed;
@@ -455,7 +457,7 @@ void main() {
     );
   });
 
-  testWidgets('support reply notification opens Help & Support chat', (
+  testWidgets('support reply notifications are hidden from Updates', (
     tester,
   ) async {
     final service = _FakeCustomerService(
@@ -483,17 +485,143 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Customer support reply'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Help & Support'), findsOneWidget);
-    expect(
-      find.text('How can we help with your subscription?'),
-      findsOneWidget,
-    );
+    expect(find.text('Customer support reply'), findsNothing);
+    expect(find.text('No updates yet'), findsOneWidget);
   });
 
-  testWidgets('home notification bell opens live Updates and shows API count', (
+  testWidgets('Continue Watching keeps real titles, progress, and tap action', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _FakeCustomerService(
+      continueEntries: const [
+        TvLibraryEntry(
+          contentType: 'movie',
+          contentId: 42,
+          title: 'Saved Movie Title',
+          posterUrl: '',
+          year: '2025',
+          positionSeconds: 150,
+          durationSeconds: 600,
+          completed: false,
+          lastWatchedAt: null,
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: CustomerHomeScreen(
+          session: const AuthSession(
+            token: 'test',
+            userId: '1',
+            name: 'Test Viewer',
+            email: 'viewer@example.com',
+          ),
+          authService: service,
+          onSignOut: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Continue watching'), findsOneWidget);
+    expect(find.text('Saved Movie Title'), findsOneWidget);
+    final progress = tester.widget<LinearProgressIndicator>(
+      find.byKey(const ValueKey('continue-progress-movie-42')),
+    );
+    expect(progress.value, .25);
+    final card = tester.widget<InkWell>(
+      find.byKey(const ValueKey('continue-card-movie-42')),
+    );
+    expect(card.onTap, isNotNull);
+  });
+
+  testWidgets('Updates renders only the four customer event categories', (
+    tester,
+  ) async {
+    final service = _FakeCustomerService(
+      notificationFeed: const TvNotificationFeed(
+        notifications: [
+          TvNotificationEntry(
+            id: 'blog-1',
+            title: 'New blog post',
+            message: 'A new story is available.',
+            type: 'new_blog_post',
+            linkUrl: null,
+            createdAt: null,
+            readAt: null,
+          ),
+          TvNotificationEntry(
+            id: 'purchase-1',
+            title: 'Subscription purchase completed',
+            message: 'Membership activated.',
+            type: 'subscription_purchase_completed',
+            linkUrl: null,
+            createdAt: null,
+            readAt: null,
+          ),
+          TvNotificationEntry(
+            id: 'expired-1',
+            title: 'Subscription expired',
+            message: 'Renew to continue.',
+            type: 'subscription_expired',
+            linkUrl: null,
+            createdAt: null,
+            readAt: null,
+          ),
+          TvNotificationEntry(
+            id: 'download-1',
+            title: 'Download completed',
+            message: 'Ready for offline playback.',
+            type: 'download_completed',
+            linkUrl: null,
+            createdAt: null,
+            readAt: null,
+          ),
+          TvNotificationEntry(
+            id: 'support-1',
+            title: 'Customer support reply',
+            message: 'We have replied.',
+            type: 'support_reply',
+            linkUrl: null,
+            createdAt: null,
+            readAt: null,
+          ),
+          TvNotificationEntry(
+            id: 'download-failed-1',
+            title: 'Download failed',
+            message: 'Please retry.',
+            type: 'download_failed',
+            linkUrl: null,
+            createdAt: null,
+            readAt: null,
+          ),
+        ],
+        unreadCount: 6,
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: NotificationsScreen(service: service),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('New blog post'), findsOneWidget);
+    expect(find.text('Subscription purchase completed'), findsOneWidget);
+    expect(find.text('Subscription expired'), findsOneWidget);
+    expect(find.text('Download completed'), findsOneWidget);
+    expect(find.text('Customer support reply'), findsNothing);
+    expect(find.text('Download failed'), findsNothing);
+  });
+
+  testWidgets('home notification bell shows the allowed unread count', (
     tester,
   ) async {
     final service = _FakeCustomerService(
@@ -501,9 +629,9 @@ void main() {
         notifications: [
           TvNotificationEntry(
             id: '8',
-            title: 'New YGNTV update',
+            title: 'New blog post',
             message: 'A real update from the API.',
-            type: null,
+            type: 'new_blog_post',
             linkUrl: null,
             createdAt: null,
             readAt: null,
@@ -531,11 +659,13 @@ void main() {
     await tester.pumpAndSettle();
     final badge = tester.widget<Badge>(find.byType(Badge).first);
     expect(badge.isLabelVisible, isTrue);
+    expect(badge.label, isA<Text>());
+    expect((badge.label as Text).data, '1');
 
     await tester.tap(find.byTooltip('Updates'));
     await tester.pumpAndSettle();
-    expect(find.text('YGNTV Updates'), findsOneWidget);
-    expect(find.text('New YGNTV update'), findsOneWidget);
+    expect(find.text('1 unread'), findsOneWidget);
+    expect(find.text('New blog post'), findsOneWidget);
   });
 
   testWidgets('home marquee is hidden when empty and shown for Admin text', (

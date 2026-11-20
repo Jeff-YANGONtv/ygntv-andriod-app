@@ -9,6 +9,7 @@ class AuthController extends ChangeNotifier {
   AuthSession? session;
   bool busy = false;
   bool ready = false;
+  Future<void> Function()? beforeSignOut;
 
   Future<void> restore() async {
     try {
@@ -47,7 +48,15 @@ class AuthController extends ChangeNotifier {
 
   Future<void> signOut() async {
     try {
-      await service.logout();
+      final cleanup = beforeSignOut;
+      if (cleanup != null) {
+        await cleanup().timeout(const Duration(seconds: 1));
+      }
+    } catch (_) {
+      // Sign-out must continue if the final screen-time event cannot be sent.
+    }
+    try {
+      await service.logout().timeout(const Duration(seconds: 2));
     } catch (_) {
       // Clear the local secure session even if the server cannot be reached.
     }

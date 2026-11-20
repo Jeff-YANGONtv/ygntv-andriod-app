@@ -407,6 +407,8 @@ class TvProfileData {
     required this.displayName,
     required this.entitlement,
     required this.devices,
+    this.screenTimeLast30DaysSeconds = 0,
+    this.deviceLimit = 2,
   });
 
   final String name;
@@ -414,12 +416,15 @@ class TvProfileData {
   final String displayName;
   final TvEntitlement entitlement;
   final List<TvDevice> devices;
+  final int screenTimeLast30DaysSeconds;
+  final int deviceLimit;
 
   factory TvProfileData.fromJson(Map<String, dynamic> json) {
     final user = _asMap(json['user']);
     final profile = _asMap(json['profile']);
     final entitlement = _asMap(json['entitlement']);
     final devicesValue = json['devices'];
+    final screenTime = _asMap(json['screen_time']);
     return TvProfileData(
       name: _firstString(user, ['name'], fallback: 'Yangon TV viewer'),
       email: _firstString(user, ['email']),
@@ -427,6 +432,9 @@ class TvProfileData {
         'display_name',
       ], fallback: _firstString(user, ['name'], fallback: 'Yangon TV viewer')),
       entitlement: TvEntitlement.fromJson(entitlement),
+      screenTimeLast30DaysSeconds:
+          _intValue(screenTime['last_30_days_seconds']) ?? 0,
+      deviceLimit: (_intValue(json['device_limit']) ?? 2).clamp(1, 2).toInt(),
       devices: devicesValue is List
           ? devicesValue
                 .whereType<Map>()
@@ -640,6 +648,63 @@ class TvNotificationEntry {
 
   bool get isRead => readAt != null && readAt!.isNotEmpty;
 
+  bool get isCustomerVisible {
+    final normalizedType = (type ?? '').toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9]'),
+      '',
+    );
+    if (_customerVisibleTypes.contains(normalizedType)) return true;
+    if (normalizedType.contains('subscription') &&
+        normalizedType.contains('expired')) {
+      return true;
+    }
+    final isCompletedSubscriptionPurchase =
+        normalizedType.contains('subscription') &&
+        (normalizedType.contains('purchas') ||
+            normalizedType.contains('payment')) &&
+        (normalizedType.contains('complet') ||
+            normalizedType.contains('success') ||
+            normalizedType.contains('paid'));
+    if (isCompletedSubscriptionPurchase) return true;
+    if (normalizedType.contains('download') &&
+        normalizedType.contains('complet')) {
+      return true;
+    }
+    if (normalizedType.isNotEmpty) return false;
+
+    final text = '$title $message'.toLowerCase();
+    if (text.contains('blog') &&
+        text.contains('post') &&
+        (text.contains('new') || text.contains('published'))) {
+      return true;
+    }
+    if (text.contains('subscription') && text.contains('expired')) return true;
+    if (text.contains('subscription') &&
+        (text.contains('purchase') || text.contains('payment')) &&
+        (text.contains('complete') || text.contains('success'))) {
+      return true;
+    }
+    return text.contains('download') && text.contains('complete');
+  }
+
+  static const _customerVisibleTypes = <String>{
+    'blogpost',
+    'newblogpost',
+    'blogpostnew',
+    'blogpostcreated',
+    'blogpostpublished',
+    'blogpublished',
+    'subscriptionpurchasecompleted',
+    'subscriptionpurchased',
+    'subscriptionpaymentcompleted',
+    'premiumsubscriptionpurchasecompleted',
+    'premiumsubscriptionpurchased',
+    'subscriptionexpired',
+    'premiumsubscriptionexpired',
+    'downloadcomplete',
+    'downloadcompleted',
+  };
+
   factory TvNotificationEntry.fromJson(Map<String, dynamic> json) =>
       TvNotificationEntry(
         id: '${json['id'] ?? ''}',
@@ -668,6 +733,13 @@ class TvNotificationFeed {
   final int localUnreadCount;
 
   bool get hasUnreadCount => hasServerUnreadCount || localUnreadCount > 0;
+
+  List<TvNotificationEntry> get visibleNotifications => notifications
+      .where((item) => item.isCustomerVisible)
+      .toList(growable: false);
+
+  int get visibleUnreadCount =>
+      visibleNotifications.where((item) => !item.isRead).length;
 
   factory TvNotificationFeed.fromJson(Map<String, dynamic> json) {
     final serverUnreadCount = _intValue(json['unread_count']);
@@ -1092,6 +1164,118 @@ class AuthService {
     final root = _decodeMap(response.body);
     _checkResponse(response, root);
     return TvProfileData.fromJson(_mapFrom(root));
+  }
+
+  Future<void> recordScreenTime({
+    required String sessionId,
+    required String event,
+  }) async {
+    if (!const {'start', 'heartbeat', 'end'}.contains(event)) return;
+    final response = await _post('/tv/screen-time', {
+      'session_id': sessionId,
+      'event': event,
+    }, authenticated: true);
+    final root = _decodeMap(response.body);
+    _checkResponse(response, root);
+  }
+
+  Future<Map<String, dynamic>> getDailySignInWheelOverview() async {
+    final response = await _get('/tv/daily-signin-wheel', authenticated: true);
+    final root = _decodeMap(response.body);
+    _checkResponse(response, root);
+    return _mapFrom(root);
+  }
+
+  Future<Map<String, dynamic>> spinDailySignInWheel({
+    required String spinKey,
+  }) async {
+    final response = await _post('/tv/daily-signin-wheel/spin', {
+      'spin_key': spinKey,
+    }, authenticated: true);
+    final root = _decodeMap(response.body);
+    _checkResponse(response, root);
+    return _mapFrom(root);
+  }
+
+  Future<Map<String, dynamic>> getDailyWheelOptions({
+    required String spinId,
+    required String type,
+    required int page,
+    String search = '',
+  }) async {
+    final query = <String, String>{'type': type, 'page': '$page'};
+    final normalizedSearch = search.trim();
+    if (normalizedSearch.isNotEmpty) query['search'] = normalizedSearch;
+    final response = await _get(
+      '/tv/daily-signin-wheel/${Uri.encodeComponent(spinId)}/options',
+      authenticated: true,
+      query: query,
+    );
+    final root = _decodeMap(response.body);
+    _checkResponse(response, root);
+    if (root['success'] == false) {
+      final failure = _exceptionFrom(root, response.statusCode);
+      throw AuthException(
+        failure.message,
+        statusCode: response.statusCode >= 400 ? response.statusCode : null,
+        code: failure.code,
+      );
+    }
+    final data = _mapFrom(root);
+    final items = data['items'];
+    if (items is! List || items.any((item) => item is! Map)) {
+      throw const AuthException(
+        'YGNTV returned an invalid reward-options response.',
+        code: 'invalid_reward_options',
+      );
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> commitDailyWheelSelection({
+    required String spinId,
+    required String type,
+    List<int> contentIds = const [],
+    int? seasonId,
+  }) async {
+    final body = type == 'season'
+        ? <String, Object?>{'type': 'season', 'season_id': seasonId}
+        : <String, Object?>{
+            'type': type,
+            'content_ids': List<int>.unmodifiable(contentIds),
+          };
+    final response = await _post(
+      '/tv/daily-signin-wheel/${Uri.encodeComponent(spinId)}/select',
+      body,
+      authenticated: true,
+    );
+    final root = _decodeMap(response.body);
+    _checkResponse(response, root);
+    return _mapFrom(root);
+  }
+
+  Future<Map<String, dynamic>> getReferralOverview() async {
+    final response = await _get('/tv/referrals', authenticated: true);
+    final root = _decodeMap(response.body);
+    _checkResponse(response, root);
+    return _mapFrom(root);
+  }
+
+  Future<Map<String, dynamic>> requestReferralWithdrawal({
+    required int amountKs,
+    required String paymentMethod,
+    required String payoutAddress,
+    required String requestKey,
+  }) async {
+    final response = await _post('/tv/referrals/withdrawals', {
+      'amount_ks': amountKs,
+      'payment_method': paymentMethod,
+      'payout_address': payoutAddress.trim(),
+      'request_key': requestKey,
+    }, authenticated: true);
+    final root = _decodeMap(response.body);
+    _checkResponse(response, root);
+    return _mapFrom(root);
   }
 
   Future<List<TvPremiumPlan>> getPremiumPlans() async {
