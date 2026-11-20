@@ -1,14 +1,23 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../widgets/ygntv_brand.dart';
 
 const _ink = Color(0xFF09090D);
-const _panel = Color(0xFF17171E);
+const _panel = Color(0xE817171E);
 const _panelRaised = Color(0xFF202028);
 const _muted = Color(0xFFA4A1AA);
 const _red = Color(0xFFE5454F);
 const _gold = Color(0xFFE8C27E);
 const _telegramBlue = Color(0xFF229ED9);
+
+const _footerLinks = <(String, String)>[
+  ('Privacy Policy', 'https://ygntv.org/privacy-policy'),
+  ('User Guide', 'https://ygntv.org/user-guide'),
+  ('24/7 Contact Us', 'https://ygntv.org/contact'),
+];
 
 typedef SignInCallback = Future<String?> Function(
   String email,
@@ -46,7 +55,6 @@ class _SignInScreenState extends State<SignInScreen> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  final _confirmPassword = TextEditingController();
   bool _isSignUp = false;
   bool _showPassword = false;
 
@@ -55,16 +63,13 @@ class _SignInScreenState extends State<SignInScreen> {
     _name.dispose();
     _email.dispose();
     _password.dispose();
-    _confirmPassword.dispose();
     super.dispose();
   }
 
   void _setMode(bool signUp) {
     if (_isSignUp == signUp) return;
-    setState(() {
-      _isSignUp = signUp;
-      _confirmPassword.clear();
-    });
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _isSignUp = signUp);
   }
 
   Future<void> _submit() async {
@@ -86,6 +91,18 @@ class _SignInScreenState extends State<SignInScreen> {
     if (message != null && mounted) _showMessage(message);
   }
 
+  Future<void> _openFooterLink(String url) async {
+    try {
+      final opened = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened && mounted) _showMessage('Could not open this YGNTV page.');
+    } catch (_) {
+      if (mounted) _showMessage('Could not open this YGNTV page.');
+    }
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -98,40 +115,68 @@ class _SignInScreenState extends State<SignInScreen> {
     return Scaffold(
       backgroundColor: _ink,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          const Positioned.fill(child: _LaunchGlow()),
+          const _MovingWaves(),
           SafeArea(
             child: LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(20, 24, 20, 24 + bottomInset),
+              builder: (context, _) => SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(18, 22, 18, 22 + bottomInset),
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 440),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const _BrandHeader(),
-                        const SizedBox(height: 27),
-                        _buildAuthPanel(),
-                        const SizedBox(height: 19),
-                        const Text(
-                          'Myanmar stories, movies and series — all in one place.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: _muted,
-                            fontSize: 12,
-                            height: 1.55,
-                          ),
+                        const Center(
+                          child: YgntvLogoMark(size: 82, radius: 21),
                         ),
-                        const SizedBox(height: 19),
+                        const SizedBox(height: 22),
+                        _buildAuthPanel(),
+                        const SizedBox(height: 18),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 5,
+                          runSpacing: 2,
+                          children: [
+                            for (var i = 0; i < _footerLinks.length; i++) ...[
+                              if (i > 0)
+                                const Text(
+                                  '·',
+                                  style: TextStyle(color: _muted, fontSize: 12),
+                                ),
+                              TextButton(
+                                onPressed: () =>
+                                    _openFooterLink(_footerLinks[i].$2),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: _gold,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 3,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  textStyle: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                child: Text(_footerLinks[i].$1),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 9),
                         const Text(
-                          'PRIVATE ANDROID TEST BUILD',
+                          'Developed by Yangon TV - Dev Team',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: Color(0xFF696771),
-                            fontSize: 9,
-                            letterSpacing: 1.8,
-                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF85818B),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -148,16 +193,16 @@ class _SignInScreenState extends State<SignInScreen> {
 
   Widget _buildAuthPanel() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(22, 24, 22, 21),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 19),
       decoration: BoxDecoration(
-        color: _panel.withValues(alpha: .96),
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(color: Colors.white.withValues(alpha: .09)),
+        color: _panel,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: .11)),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x66000000),
-            blurRadius: 44,
-            offset: Offset(0, 22),
+            color: Color(0x77000000),
+            blurRadius: 38,
+            offset: Offset(0, 18),
           ),
         ],
       ),
@@ -183,24 +228,24 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 25),
+          const SizedBox(height: 21),
           Text(
-            _isSignUp ? 'Join Yangon TV.' : 'Welcome back.',
+            _isSignUp ? 'Create your account' : 'Welcome back.',
             style: const TextStyle(
-              fontSize: 31,
-              height: 1.03,
-              letterSpacing: -1.2,
+              fontSize: 25,
+              height: 1.08,
+              letterSpacing: -.65,
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 9),
+          const SizedBox(height: 6),
           Text(
             _isSignUp
-                ? 'Create an account to get started.'
+                ? 'Use your name, email, and password to get started.'
                 : 'Sign in to continue watching.',
-            style: const TextStyle(color: _muted, fontSize: 13, height: 1.45),
+            style: const TextStyle(color: _muted, fontSize: 12, height: 1.4),
           ),
-          const SizedBox(height: 23),
+          const SizedBox(height: 19),
           Form(
             key: _formKey,
             child: Column(
@@ -218,7 +263,7 @@ class _SignInScreenState extends State<SignInScreen> {
                         ? 'Enter your name.'
                         : null,
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                 ],
                 _InputField(
                   label: 'Email address',
@@ -237,7 +282,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 _InputField(
                   label: 'Password',
                   hint: 'At least 8 characters',
@@ -256,12 +301,8 @@ class _SignInScreenState extends State<SignInScreen> {
                       color: _muted,
                     ),
                   ),
-                  textInputAction: _isSignUp
-                      ? TextInputAction.next
-                      : TextInputAction.done,
-                  onFieldSubmitted: (_) {
-                    if (!_isSignUp) _submit();
-                  },
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _submit(),
                   validator: (value) {
                     final password = value ?? '';
                     if (password.isEmpty) return 'Enter your password.';
@@ -271,24 +312,9 @@ class _SignInScreenState extends State<SignInScreen> {
                     return null;
                   },
                 ),
-                if (_isSignUp) ...[
-                  const SizedBox(height: 14),
-                  _InputField(
-                    label: 'Confirm password',
-                    hint: 'Repeat your password',
-                    icon: Icons.lock_outline_rounded,
-                    controller: _confirmPassword,
-                    obscureText: !_showPassword,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _submit(),
-                    validator: (value) => value != _password.text
-                        ? 'Passwords do not match.'
-                        : null,
-                  ),
-                ],
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
                 SizedBox(
-                  height: 52,
+                  height: 51,
                   child: FilledButton(
                     onPressed: widget.busy ? null : _submit,
                     style: FilledButton.styleFrom(
@@ -296,7 +322,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       disabledBackgroundColor: _red.withValues(alpha: .55),
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(13),
                       ),
                     ),
                     child: widget.busy
@@ -308,51 +334,51 @@ class _SignInScreenState extends State<SignInScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                _isSignUp ? 'Create account' : 'Sign In',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Icon(Icons.arrow_forward_rounded, size: 18),
-                            ],
+                        : Text(
+                            _isSignUp ? 'Create account' : 'Sign In',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                   ),
                 ),
-                const SizedBox(height: 18),
-                const _OrDivider(),
-                const SizedBox(height: 16),
-                _SocialButton(
-                  label: 'Continue with Google',
-                  leading: const Text(
-                    'G',
-                    style: TextStyle(
-                      color: Color(0xFF4285F4),
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                    ),
+                if (!_isSignUp) ...[
+                  const SizedBox(height: 18),
+                  const _OrDivider(),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _SocialIconButton(
+                        tooltip: 'Continue with Google',
+                        onPressed: widget.busy
+                            ? null
+                            : () => _social(widget.onGoogle),
+                        child: const Text(
+                          'G',
+                          style: TextStyle(
+                            color: Color(0xFF4285F4),
+                            fontSize: 23,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      _SocialIconButton(
+                        tooltip: 'Continue with Telegram',
+                        onPressed: widget.busy
+                            ? null
+                            : () => _social(widget.onTelegram),
+                        child: const Icon(
+                          Icons.send_rounded,
+                          color: _telegramBlue,
+                          size: 21,
+                        ),
+                      ),
+                    ],
                   ),
-                  onPressed: widget.busy
-                      ? null
-                      : () => _social(widget.onGoogle),
-                ),
-                const SizedBox(height: 10),
-                _SocialButton(
-                  label: 'Continue with Telegram',
-                  leading: const Icon(
-                    Icons.send_rounded,
-                    color: _telegramBlue,
-                    size: 19,
-                  ),
-                  onPressed: widget.busy
-                      ? null
-                      : () => _social(widget.onTelegram),
-                ),
+                ],
               ],
             ),
           ),
@@ -373,7 +399,7 @@ class _SignInScreenState extends State<SignInScreen> {
         borderRadius: BorderRadius.circular(12),
         onTap: widget.busy ? null : onTap,
         child: SizedBox(
-          height: 43,
+          height: 42,
           child: Center(
             child: Text(
               label,
@@ -416,192 +442,235 @@ class _InputField extends StatelessWidget {
   final FormFieldValidator<String>? validator;
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFFE1DEE3),
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 7),
-        TextFormField(
-          controller: controller,
-          keyboardType: keyboardType,
-          textInputAction: textInputAction,
-          obscureText: obscureText,
-          autocorrect: false,
-          enableSuggestions: !obscureText,
-          onFieldSubmitted: onFieldSubmitted,
-          validator: validator,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          decoration: InputDecoration(
-            hintText: hint,
-            prefixIcon: Icon(icon, color: _muted, size: 19),
-            suffixIcon: suffix,
-            filled: true,
-            fillColor: const Color(0xFF0E0E13),
-            hintStyle: const TextStyle(color: Color(0xFF77747D), fontSize: 13),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 13,
-              vertical: 14,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(13),
-              borderSide: const BorderSide(color: Color(0xFF35343C)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(13),
-              borderSide: const BorderSide(color: Color(0xFF35343C)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(13),
-              borderSide: const BorderSide(color: _red, width: 1.3),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(13),
-              borderSide: const BorderSide(color: _red),
-            ),
-            focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(13),
-              borderSide: const BorderSide(color: _red, width: 1.3),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _BrandHeader extends StatelessWidget {
-  const _BrandHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const YgntvLogoMark(size: 72, radius: 20),
-        const SizedBox(height: 12),
-        RichText(
-          text: const TextSpan(
-            style: TextStyle(
-              fontSize: 21,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.1,
-            ),
-            children: [
-              TextSpan(text: 'YANGON '),
-              TextSpan(
-                text: 'TV',
-                style: TextStyle(color: _red),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          'YOUR NEXT STORY STARTS HERE',
-          style: TextStyle(
-            color: _gold,
-            fontSize: 9,
-            letterSpacing: 2.1,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LaunchGlow extends StatelessWidget {
-  const _LaunchGlow();
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment(0, -1.1),
-          radius: 1.15,
-          colors: [Color(0xFF291317), _ink],
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFFE1DEE3),
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
         ),
       ),
-      child: const SizedBox.expand(),
-    );
-  }
+      const SizedBox(height: 6),
+      TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        textInputAction: textInputAction,
+        obscureText: obscureText,
+        autocorrect: false,
+        enableSuggestions: !obscureText,
+        onFieldSubmitted: onFieldSubmitted,
+        validator: validator,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: hint,
+          prefixIcon: Icon(icon, color: _muted, size: 19),
+          suffixIcon: suffix,
+          filled: true,
+          fillColor: const Color(0xFF0E0E13),
+          hintStyle: const TextStyle(color: Color(0xFF77747D), fontSize: 13),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 13,
+            vertical: 13,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF35343C)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF35343C)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: _red, width: 1.3),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: _red),
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: _red, width: 1.3),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _SocialIconButton extends StatelessWidget {
+  const _SocialIconButton({
+    required this.tooltip,
+    required this.onPressed,
+    required this.child,
+  });
+
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: SizedBox(
+      width: 56,
+      height: 48,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: const Color(0xFF121218),
+          foregroundColor: Colors.white,
+          side: BorderSide(color: Colors.white.withValues(alpha: .14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(13),
+          ),
+          padding: EdgeInsets.zero,
+        ),
+        child: child,
+      ),
+    ),
+  );
 }
 
 class _OrDivider extends StatelessWidget {
   const _OrDivider();
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Divider(color: Colors.white.withValues(alpha: .11), height: 1),
-        ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12),
-          child: Text(
-            'OR',
-            style: TextStyle(
-              color: _muted,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
-            ),
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Divider(color: Colors.white.withValues(alpha: .12), height: 1),
+      ),
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 10),
+        child: Text(
+          'OR CONTINUE VIA',
+          style: TextStyle(
+            color: _muted,
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.15,
           ),
-        ),
-        Expanded(
-          child: Divider(color: Colors.white.withValues(alpha: .11), height: 1),
-        ),
-      ],
-    );
-  }
-}
-
-class _SocialButton extends StatelessWidget {
-  const _SocialButton({
-    required this.label,
-    required this.leading,
-    required this.onPressed,
-  });
-
-  final String label;
-  final Widget leading;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 49,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          backgroundColor: const Color(0xFF121218),
-          foregroundColor: Colors.white,
-          side: BorderSide(color: Colors.white.withValues(alpha: .11)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(13),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            leading,
-            const SizedBox(width: 10),
-            Text(
-              label,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-            ),
-          ],
         ),
       ),
+      Expanded(
+        child: Divider(color: Colors.white.withValues(alpha: .12), height: 1),
+      ),
+    ],
+  );
+}
+
+class _MovingWaves extends StatefulWidget {
+  const _MovingWaves();
+
+  @override
+  State<_MovingWaves> createState() => _MovingWavesState();
+}
+
+class _MovingWavesState extends State<_MovingWaves>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _motion = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 15),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _motion.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _motion,
+    child: const SizedBox.expand(),
+    builder: (context, child) =>
+        CustomPaint(painter: _WavePainter(_motion.value), child: child),
+  );
+}
+
+class _WavePainter extends CustomPainter {
+  const _WavePainter(this.phase);
+
+  final double phase;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = _ink);
+    if (size.isEmpty) return;
+
+    final glowRect = Rect.fromCircle(
+      center: Offset(size.width * .5, size.height * .72),
+      radius: size.width * .78,
+    );
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()
+        ..shader = RadialGradient(
+          colors: const [Color(0x4D6E101A), Color(0x006E101A)],
+          stops: const [0, 1],
+        ).createShader(glowRect),
+    );
+
+    _drawWave(
+      canvas,
+      size,
+      base: size.height * .79,
+      amplitude: size.height * .065,
+      offset: phase * math.pi * 2,
+      color: const Color(0xFF16090D),
+    );
+    _drawWave(
+      canvas,
+      size,
+      base: size.height * .85,
+      amplitude: size.height * .055,
+      offset: phase * math.pi * 2 + 1.9,
+      color: const Color(0xFF3A0C13),
+    );
+    _drawWave(
+      canvas,
+      size,
+      base: size.height * .91,
+      amplitude: size.height * .042,
+      offset: phase * math.pi * 2 + 3.6,
+      color: const Color(0xFF861923),
+    );
+    _drawWave(
+      canvas,
+      size,
+      base: size.height * .97,
+      amplitude: size.height * .028,
+      offset: phase * math.pi * 2 + 5.1,
+      color: const Color(0xFF2A090E),
     );
   }
+
+  void _drawWave(
+    Canvas canvas,
+    Size size, {
+    required double base,
+    required double amplitude,
+    required double offset,
+    required Color color,
+  }) {
+    final path = Path()..moveTo(0, base);
+    for (var x = 0.0; x <= size.width; x += 8) {
+      final angle = (x / size.width) * math.pi * 2.2 + offset;
+      final y = base + math.sin(angle) * amplitude;
+      path.lineTo(x, y);
+    }
+    path
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, Paint()..color = color.withValues(alpha: .78));
+  }
+
+  @override
+  bool shouldRepaint(covariant _WavePainter oldDelegate) =>
+      oldDelegate.phase != phase;
 }

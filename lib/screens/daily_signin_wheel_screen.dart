@@ -20,18 +20,18 @@ class _BonusOutcome {
 }
 
 const _bonusOutcomes = <_BonusOutcome>[
-  _BonusOutcome('one_episode', 'WATCH FREE 1 EPISODE', 5, Color(0xFFAA171D)),
-  _BonusOutcome('one_movie', 'WATCH FREE 1 MOVIE', 5, Color(0xFF19191D)),
+  _BonusOutcome('one_episode', '1 EPISODE', 5, Color(0xFFAA171D)),
+  _BonusOutcome('one_movie', '1 MOVIE', 5, Color(0xFF19191D)),
   _BonusOutcome(
     'good_luck_next_round',
     'GOOD LUCK IN NEXT ROUND',
     25,
     Color(0xFFC5222A),
   ),
-  _BonusOutcome('two_movies', 'WATCH FREE 2 MOVIES', 5, Color(0xFF202024)),
-  _BonusOutcome('two_episodes', 'WATCH FREE 2 EPISODES', 5, Color(0xFFD0A13C)),
+  _BonusOutcome('two_movies', '2 MOVIES', 5, Color(0xFF202024)),
+  _BonusOutcome('two_episodes', '2 EPISODES', 5, Color(0xFFD0A13C)),
   _BonusOutcome('roll_again', 'ROLL AGAIN', 25, Color(0xFFAE171E)),
-  _BonusOutcome('three_movies', 'WATCH FREE 3 MOVIES', 5, Color(0xFF19191D)),
+  _BonusOutcome('three_movies', '3 MOVIES', 5, Color(0xFF19191D)),
   _BonusOutcome('thanks_for_choosing_us', 'THANK YOU', 25, Color(0xFFC5222A)),
 ];
 
@@ -40,6 +40,10 @@ List<String> get dailyBonusOutcomeOrder =>
 
 Map<String, int> get dailyBonusRewardWeights => Map.unmodifiable({
   for (final outcome in _bonusOutcomes) outcome.code: outcome.weight,
+});
+
+Map<String, String> get dailyBonusRewardLabels => Map.unmodifiable({
+  for (final outcome in _bonusOutcomes) outcome.code: outcome.label,
 });
 
 final _rewardLabels = {
@@ -261,23 +265,95 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
                       SizedBox(
                         width: 280,
                         height: 250,
-                        child: AnimatedBuilder(
-                          animation: _boxController,
-                          builder: (context, _) {
-                            final progress = _boxController.value;
-                            return Semantics(
-                              label: 'Lucky Box',
-                              value: progress >= .98
-                                  ? 'Open'
-                                  : progress > 0
-                                  ? 'Opening'
-                                  : 'Closed',
-                              child: CustomPaint(
-                                key: const ValueKey('daily-lucky-box-art'),
-                                painter: _LuckyBoxPainter(progress: progress),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Positioned.fill(
+                              child: AnimatedBuilder(
+                                animation: _boxController,
+                                builder: (context, _) {
+                                  final progress = _boxController.value;
+                                  return Semantics(
+                                    label: 'Lucky Box',
+                                    value: progress >= .98
+                                        ? 'Open'
+                                        : progress > 0
+                                        ? 'Opening'
+                                        : 'Closed',
+                                    child: CustomPaint(
+                                      key: const ValueKey(
+                                        'daily-lucky-box-art',
+                                      ),
+                                      painter: _LuckyBoxPainter(
+                                        progress: progress,
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                          },
+                            ),
+                            if (prize != null)
+                              Positioned(
+                                top: 8,
+                                left: 18,
+                                right: 18,
+                                child: TweenAnimationBuilder<double>(
+                                  key: ValueKey(
+                                    'daily-box-floating-reward-$_rewardRevealKey',
+                                  ),
+                                  tween: Tween(begin: 0, end: 1),
+                                  duration: const Duration(milliseconds: 700),
+                                  curve: Curves.easeOutCubic,
+                                  builder: (context, value, child) {
+                                    final progress = value
+                                        .clamp(0.0, 1.0)
+                                        .toDouble();
+                                    return Opacity(
+                                      opacity: progress,
+                                      child: Transform.translate(
+                                        offset: Offset(0, 62 * (1 - progress)),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF7E7BE),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: _gold,
+                                        width: 1.5,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: _gold.withValues(alpha: .25),
+                                          blurRadius: 14,
+                                          offset: const Offset(0, 5),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Text(
+                                      _rewardLabels[code] ?? 'Reward',
+                                      key: const ValueKey(
+                                        'daily-box-floating-reward-label',
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: _ink,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                       if (_opening) ...[
@@ -1006,8 +1082,7 @@ class _LuckyBoxPainter extends CustomPainter {
     ];
     for (var index = 0; index < stars.length; index++) {
       final (center, radius) = stars[index];
-      final shimmer =
-          .35 + .65 * ((math.sin(progress * 12 + index * 1.7) + 1) / 2);
+      final shimmer = .35 + .65 * ((math.sin(t * 12 + index * 1.7) + 1) / 2);
       final r = radius * (.72 + shimmer * .28);
       final path = Path()
         ..moveTo(center.dx, center.dy - r)

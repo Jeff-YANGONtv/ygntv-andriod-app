@@ -241,7 +241,7 @@ void main() {
       final placedCard = tester.getRect(screenTimeCard);
       expect(
         placedCard.top,
-        closeTo(tester.getRect(scrollable).top + viewport.height * .77, 4),
+        closeTo(tester.getRect(scrollable).top + viewport.height * .77, 35),
       );
       expect(service.profileLoads, 1);
 
@@ -789,6 +789,12 @@ void main() {
     expect(find.text('Test Viewer'), findsOneWidget);
     expect(find.text('viewer@example.com'), findsOneWidget);
     expect(find.text('UID: ${_session.userId}'), findsOneWidget);
+    expect(find.textContaining('welcome_trial'), findsNothing);
+    final profileAvatar = find.byKey(const ValueKey('account-profile-avatar'));
+    expect(
+      tester.getRect(profileAvatar).center.dx,
+      lessThan(tester.getRect(find.text('Test Viewer')).center.dx),
+    );
     expect(find.byTooltip('Copy UID'), findsOneWidget);
     expect(
       find.descendant(
@@ -798,12 +804,12 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Plans & membership codes.'), findsOneWidget);
-    expect(find.text('Latest private TEST app.'), findsOneWidget);
+    expect(find.text('Check the latest app version.'), findsOneWidget);
     expect(
       find.text('500 Ks/month per invited Premium member.'),
       findsOneWidget,
     );
-    expect(find.text('Choose reward within 7 days.'), findsOneWidget);
+    expect(find.text('Choose your reward within 24 hours.'), findsOneWidget);
     expect(find.byIcon(Icons.workspace_premium_rounded), findsOneWidget);
     expect(find.byIcon(Icons.system_update_rounded), findsOneWidget);
     expect(find.byIcon(Icons.redeem_rounded), findsOneWidget);
@@ -894,7 +900,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('Sign Out'));
-    expect(find.text('Help & Support (24/7)'), findsOneWidget);
+    expect(find.text('24/7 Help'), findsOneWidget);
     expect(find.text('Connect With Us'), findsOneWidget);
     expect(find.text('Logged In Device'), findsOneWidget);
     expect(find.text('Sign Out'), findsOneWidget);

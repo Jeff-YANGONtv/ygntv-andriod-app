@@ -12,12 +12,12 @@ import 'package:ygntv_customer/screens/sign_in_screen.dart';
 import 'package:ygntv_customer/screens/subscription_screen.dart';
 import 'package:ygntv_customer/widgets/resilient_network_image.dart';
 
-Widget _testScreen() => MaterialApp(
+Widget _testScreen({SignUpCallback? onSignUp}) => MaterialApp(
   theme: ThemeData.dark(useMaterial3: true),
   home: SignInScreen(
     busy: false,
     onSignIn: (_, _) async => null,
-    onSignUp: (_, _, _) async => null,
+    onSignUp: onSignUp ?? (_, _, _) async => null,
     onGoogle: () async => null,
     onTelegram: () async => null,
   ),
@@ -188,23 +188,60 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(_testScreen());
+    await tester.pump();
     expect(find.text('Welcome back.'), findsOneWidget);
     expect(find.text('Email address'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
-    expect(find.text('Continue with Google'), findsOneWidget);
-    expect(find.text('Continue with Telegram'), findsOneWidget);
+    expect(find.text('OR CONTINUE VIA'), findsOneWidget);
+    expect(find.byTooltip('Continue with Google'), findsOneWidget);
+    expect(find.byTooltip('Continue with Telegram'), findsOneWidget);
     expect(find.text('Sign Up'), findsOneWidget);
   });
 
-  testWidgets('Sign Up switches to the account creation form', (tester) async {
-    await tester.pumpWidget(_testScreen());
-    await tester.tap(find.text('Sign Up'));
-    await tester.pumpAndSettle();
-    expect(find.text('Join Yangon TV.'), findsOneWidget);
-    expect(find.text('Display name'), findsOneWidget);
-    expect(find.text('Confirm password'), findsOneWidget);
-    expect(find.text('Create account'), findsOneWidget);
-  });
+  testWidgets(
+    'Sign Up submits name, email, and password without confirmation or social controls',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      String? submittedName;
+      String? submittedEmail;
+      String? submittedPassword;
+      await tester.pumpWidget(
+        _testScreen(
+          onSignUp: (name, email, password) async {
+            submittedName = name;
+            submittedEmail = email;
+            submittedPassword = password;
+            return null;
+          },
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Sign Up'));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.text('Create your account'), findsOneWidget);
+      expect(find.text('Display name'), findsOneWidget);
+      expect(find.text('Create account'), findsOneWidget);
+      expect(find.text('Confirm password'), findsNothing);
+      expect(find.byTooltip('Continue with Google'), findsNothing);
+      expect(find.byTooltip('Continue with Telegram'), findsNothing);
+      expect(find.text('OR CONTINUE VIA'), findsNothing);
+
+      final fields = find.byType(TextFormField);
+      expect(fields, findsNWidgets(3));
+      await tester.enterText(fields.at(0), 'Zin Ko');
+      await tester.enterText(fields.at(1), 'zin@example.com');
+      await tester.enterText(fields.at(2), 'secure-pass-2026');
+      await tester.tap(find.widgetWithText(FilledButton, 'Create account'));
+      await tester.pump();
+      await tester.pump();
+      expect(submittedName, 'Zin Ko');
+      expect(submittedEmail, 'zin@example.com');
+      expect(submittedPassword, 'secure-pass-2026');
+    },
+  );
 
   test('TMDB poster paths resolve directly to image.tmdb.org', () {
     final item = CatalogItem.fromJson({
@@ -806,7 +843,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(FloatingActionButton), findsNothing);
 
-      final helpEntry = find.text('Help & Support').first;
+      final helpEntry = find.text('24/7 Help').first;
       await tester.scrollUntilVisible(
         helpEntry,
         250,

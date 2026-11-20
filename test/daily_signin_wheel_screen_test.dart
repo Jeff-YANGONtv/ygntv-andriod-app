@@ -148,6 +148,16 @@ void main() {
       'three_movies',
       'thanks_for_choosing_us',
     ]);
+    expect(dailyBonusRewardLabels, const {
+      'one_episode': '1 EPISODE',
+      'one_movie': '1 MOVIE',
+      'good_luck_next_round': 'GOOD LUCK IN NEXT ROUND',
+      'two_movies': '2 MOVIES',
+      'two_episodes': '2 EPISODES',
+      'roll_again': 'ROLL AGAIN',
+      'three_movies': '3 MOVIES',
+      'thanks_for_choosing_us': 'THANK YOU',
+    });
   });
 
   testWidgets('Lucky Box hides odds card but preserves history and weights', (
@@ -272,6 +282,14 @@ void main() {
       expect(
         find.text('The server has made another box available.'),
         findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('daily-box-floating-reward-label')),
+            )
+            .data,
+        'ROLL AGAIN',
       );
       expect(
         tester

@@ -219,7 +219,7 @@ class _AccountScreenState extends State<AccountScreen> {
           const SizedBox(height: 8),
           _ActionTile(
             icon: Icons.headset_mic_rounded,
-            title: 'Help & Support (24/7)',
+            title: '24/7 Help',
             subtitle: 'Chat with YGNTV customer care anytime.',
             onTap: () => _open(SupportChatScreen(service: widget.service)),
           ),
@@ -439,17 +439,13 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final profileName = profile?.name.trim();
-    final usableProfileName = profileName == 'Yangon TV viewer'
-        ? ''
-        : (profileName ?? '');
+    final profileDisplayName = profile?.displayName.trim() ?? '';
+    final profileName = profile?.name.trim() ?? '';
     final sessionName = session.name.trim();
-    final usableSessionName = sessionName == 'Yangon TV viewer'
-        ? ''
-        : sessionName;
-    final name = usableProfileName.isNotEmpty
-        ? usableProfileName
-        : usableSessionName;
+    final name = [profileDisplayName, profileName, sessionName].firstWhere(
+      (value) => value.isNotEmpty && value != 'Yangon TV viewer',
+      orElse: () => '',
+    );
     final profileEmail = profile?.email.trim();
     final email = profileEmail != null && profileEmail.isNotEmpty
         ? profileEmail
@@ -528,114 +524,105 @@ class _ProfileCard extends StatelessWidget {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Center(
-                        child: Container(
-                          width: 66,
-                          height: 66,
-                          padding: const EdgeInsets.all(2),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [ygntvGold, ygntvRed],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: ygntvRed.withValues(alpha: .22),
-                                blurRadius: 14,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
+                      Container(
+                        width: 58,
+                        height: 58,
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [ygntvGold, ygntvRed],
                           ),
-                          child: CircleAvatar(
-                            key: const ValueKey('account-profile-avatar'),
-                            backgroundColor: const Color(0xFF19191F),
-                            child: Text(
-                              initialSource.characters.first.toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 25,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        heading,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'YGNTV MEMBER',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: ygntvMuted,
-                          fontSize: 9,
-                          letterSpacing: 1,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      if (email.isNotEmpty) ...[
-                        const SizedBox(height: 5),
-                        Text(
-                          email,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: ygntvMuted,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                      if (uid.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'UID: $uid',
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: ygntvGold,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Copy UID',
-                              onPressed: onCopyUid,
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints.tightFor(
-                                width: 30,
-                                height: 30,
-                              ),
-                              icon: const Icon(
-                                Icons.copy_rounded,
-                                color: ygntvGold,
-                                size: 14,
-                              ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: ygntvRed.withValues(alpha: .20),
+                              blurRadius: 12,
+                              offset: const Offset(0, 3),
                             ),
                           ],
                         ),
-                      ],
+                        child: CircleAvatar(
+                          key: const ValueKey('account-profile-avatar'),
+                          backgroundColor: const Color(0xFF19191F),
+                          child: Text(
+                            initialSource.characters.first.toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 23,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 11),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              heading,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            if (email.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                email,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: ygntvMuted,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                            if (uid.isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'UID: $uid',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: ygntvGold,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Copy UID',
+                                    onPressed: onCopyUid,
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints.tightFor(
+                                      width: 27,
+                                      height: 25,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.copy_rounded,
+                                      color: ygntvGold,
+                                      size: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                   if (errorMessage != null) ...[
