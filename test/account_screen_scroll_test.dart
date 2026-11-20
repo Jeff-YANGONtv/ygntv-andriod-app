@@ -52,6 +52,26 @@ class _ProfileScrollService extends AuthService {
   };
 }
 
+class _PremiumProfileService extends _ProfileScrollService {
+  @override
+  Future<TvProfileData> getProfile() async {
+    final validUntil = DateTime.now().add(const Duration(days: 5, hours: 4));
+    return TvProfileData(
+      name: 'Premium Viewer',
+      email: 'premium@example.com',
+      displayName: 'Premium Viewer',
+      entitlement: TvEntitlement(
+        active: true,
+        planKey: 'welcome_trial',
+        planLabel: 'WELCOME_TRIAL',
+        validFrom: null,
+        validUntil: validUntil.toUtc().toIso8601String(),
+      ),
+      devices: const [],
+    );
+  }
+}
+
 class _FailingProfileService extends _ProfileScrollService {
   @override
   Future<TvProfileData> getProfile() async =>
@@ -744,6 +764,70 @@ void main() {
     );
   });
 
+  testWidgets('Premium profile uses validUntil and shows a blue UID check', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _PremiumProfileService();
+    await tester.pumpWidget(
+      _accountApp(
+        home: Scaffold(
+          body: AccountScreen(
+            service: service,
+            session: _session,
+            onSignOut: () async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final uidRow = find.byKey(const ValueKey('account-profile-uid-row'));
+    final uidText = find.text('UID: ${_session.userId}');
+    final check = find.byKey(const ValueKey('account-premium-verified'));
+    expect(find.descendant(of: uidRow, matching: uidText), findsOneWidget);
+    expect(find.descendant(of: uidRow, matching: check), findsOneWidget);
+    final checkIcon = tester.widget<Icon>(check);
+    expect(checkIcon.color, const Color(0xFF39A5FF));
+    expect(
+      tester.getRect(check).left,
+      greaterThan(tester.getRect(uidText).right),
+    );
+    expect(
+      tester.getRect(check).center.dy,
+      closeTo(tester.getRect(uidText).center.dy, 1),
+    );
+
+    final remaining = tester.widget<Text>(
+      find.byKey(const ValueKey('account-premium-remaining')),
+    );
+    expect(remaining.data, 'Premium · 5 days left');
+    expect(find.textContaining('ACTIVE'), findsNothing);
+    expect(find.textContaining('WELCOME_TRIAL'), findsNothing);
+
+    final background = tester.widget<Container>(
+      find.byKey(const ValueKey('account-profile-card-background')),
+    );
+    final gradient =
+        (background.decoration! as BoxDecoration).gradient! as LinearGradient;
+    expect(gradient.colors[1], const Color(0xFF8A1B28));
+
+    final dailyBonus = find.text('Daily Sign In Bonus');
+    expect(dailyBonus, findsOneWidget);
+    expect(
+      tester.widget<Text>(dailyBonus).style!.fontSize,
+      lessThanOrEqualTo(11),
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    service.dispose();
+  });
+
   testWidgets('Account quick actions are described, paired, and tappable', (
     tester,
   ) async {
@@ -792,8 +876,16 @@ void main() {
     expect(find.text('Test Viewer'), findsOneWidget);
     expect(find.text('viewer@example.com'), findsOneWidget);
     expect(find.text('UID: ${_session.userId}'), findsOneWidget);
-    expect(find.text('FREE MEMBER'), findsOneWidget);
+    expect(find.text('FREE MEMBER'), findsNothing);
     expect(find.textContaining('welcome_trial'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('account-premium-verified')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('account-premium-remaining')),
+      findsNothing,
+    );
     final profileAvatar = find.byKey(const ValueKey('account-profile-avatar'));
     final profileCard = find.byKey(const ValueKey('account-profile-card'));
     expect(
@@ -812,13 +904,12 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('Plans & membership codes.'), findsOneWidget);
-    expect(find.text('Check the latest app version.'), findsOneWidget);
-    expect(
-      find.text('500 Ks/month per invited Premium member.'),
-      findsOneWidget,
-    );
+    expect(find.text('Plans & codes'), findsOneWidget);
+    expect(find.text('Check for updates'), findsOneWidget);
+    expect(find.text('500 Ks per approved Premium month'), findsOneWidget);
     expect(find.text('Choose your reward within 24 hours.'), findsOneWidget);
+    expect(find.text('Daily Sign In Bonus'), findsOneWidget);
+    expect(find.text('Daily Sign In Bonus (Lucky Box)'), findsNothing);
     expect(find.byIcon(Icons.workspace_premium_rounded), findsOneWidget);
     expect(find.byIcon(Icons.system_update_rounded), findsOneWidget);
     expect(find.byIcon(Icons.redeem_rounded), findsOneWidget);
@@ -874,7 +965,7 @@ void main() {
     expect(updateChecks, 1);
 
     final refer = find.text('Refer & Earn');
-    final spin = find.text('Daily Sign In Bonus (Lucky Box)');
+    final spin = find.text('Daily Sign In Bonus');
     await tester.ensureVisible(refer);
     await tester.pumpAndSettle();
     expect(

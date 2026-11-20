@@ -175,7 +175,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     icon: Icons.workspace_premium_rounded,
                     key: const ValueKey('account-action-subscription'),
                     title: 'Subscription',
-                    subtitle: 'Plans & membership codes.',
+                    subtitle: 'Plans & codes',
                     onTap: () =>
                         _open(SubscriptionScreen(service: widget.service)),
                   ),
@@ -186,7 +186,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     icon: Icons.system_update_rounded,
                     key: const ValueKey('account-action-update'),
                     title: 'App Update',
-                    subtitle: 'Check the latest app version.',
+                    subtitle: 'Check for updates',
                     onTap: () => widget.onCheckForUpdates?.call(),
                   ),
                 ),
@@ -203,7 +203,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     icon: Icons.redeem_rounded,
                     key: const ValueKey('account-action-referral'),
                     title: 'Refer & Earn',
-                    subtitle: '500 Ks/month per invited Premium member.',
+                    subtitle: '500 Ks per approved Premium month',
                     onTap: () =>
                         _open(ReferralWalletScreen(service: widget.service)),
                   ),
@@ -213,7 +213,7 @@ class _AccountScreenState extends State<AccountScreen> {
                   child: _GridActionTile(
                     icon: Icons.card_giftcard_rounded,
                     key: const ValueKey('account-action-lucky-box'),
-                    title: 'Daily Sign In Bonus (Lucky Box)',
+                    title: 'Daily Sign In Bonus',
                     subtitle: 'Choose your reward within 24 hours.',
                     onTap: () =>
                         _open(DailySignInWheelScreen(service: widget.service)),
@@ -421,23 +421,19 @@ class _ProfileCard extends StatelessWidget {
         : (email.isNotEmpty ? email : 'U');
     final uid = session.userId.trim();
     final isPremium = profile?.entitlement.active == true;
-    final plan = profile?.entitlement.planLabel?.trim() ?? '';
-    final status = profile == null
-        ? 'ACCOUNT DETAILS'
-        : isPremium
-        ? 'ACTIVE · ${plan.isEmpty ? 'PREMIUM' : plan.toUpperCase()}'
-        : 'FREE MEMBER';
+    final premiumRemaining = _premiumRemainingLabel(profile?.entitlement);
 
     return ClipPath(
       key: const ValueKey('account-profile-card'),
       clipper: _ProfileHeaderClipper(),
       child: Container(
+        key: const ValueKey('account-profile-card-background'),
         width: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF1C1A20), Color(0xFF151217), Color(0xFF261116)],
+            colors: [Color(0xFF68141D), Color(0xFF8A1B28), Color(0xFF3B1118)],
           ),
         ),
         child: Stack(
@@ -546,6 +542,7 @@ class _ProfileCard extends StatelessWidget {
                   if (uid.isNotEmpty) ...[
                     const SizedBox(height: 1),
                     Row(
+                      key: const ValueKey('account-profile-uid-row'),
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Flexible(
@@ -561,6 +558,16 @@ class _ProfileCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (isPremium)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 3, right: 1),
+                            child: Icon(
+                              Icons.verified_rounded,
+                              key: ValueKey('account-premium-verified'),
+                              color: Color(0xFF39A5FF),
+                              size: 15,
+                            ),
+                          ),
                         IconButton(
                           tooltip: 'Copy UID',
                           onPressed: onCopyUid,
@@ -579,51 +586,22 @@ class _ProfileCard extends StatelessWidget {
                       ],
                     ),
                   ],
-                  const SizedBox(height: 2),
-                  Container(
-                    constraints: const BoxConstraints(maxWidth: 245),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isPremium
-                          ? ygntvGold.withValues(alpha: .12)
-                          : const Color(0xFF24232A),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                        color: (isPremium ? ygntvGold : ygntvMuted).withValues(
-                          alpha: .38,
+                  if (isPremium)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Premium · $premiumRemaining',
+                        key: const ValueKey('account-premium-remaining'),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: ygntvGold,
+                          fontSize: 10,
+                          height: 1.15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.1,
                         ),
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isPremium
-                              ? Icons.verified_rounded
-                              : Icons.person_outline_rounded,
-                          color: isPremium ? ygntvGold : ygntvMuted,
-                          size: 13,
-                        ),
-                        const SizedBox(width: 5),
-                        Flexible(
-                          child: Text(
-                            status,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: isPremium ? ygntvGold : Colors.white70,
-                              fontSize: 9,
-                              letterSpacing: .4,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                   if (errorMessage != null) ...[
                     const SizedBox(height: 7),
                     Text(
@@ -714,11 +692,12 @@ class _GridActionTile extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      maxLines: 3,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 11.5,
+                        fontSize: 11,
                         height: 1.14,
+                        letterSpacing: -0.1,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -729,8 +708,9 @@ class _GridActionTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: ygntvMuted,
-                        fontSize: 9.5,
+                        fontSize: 9,
                         height: 1.18,
+                        letterSpacing: -0.1,
                       ),
                     ),
                   ],
@@ -996,6 +976,26 @@ String _formatDate(String value) {
   final date = DateTime.tryParse(value);
   if (date == null) return value;
   return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+}
+
+String _premiumRemainingLabel(TvEntitlement? entitlement) {
+  if (entitlement?.active != true) return '';
+  final rawExpiry = entitlement?.validUntil?.trim();
+  if (rawExpiry == null || rawExpiry.isEmpty) return 'duration unavailable';
+  final expiry = DateTime.tryParse(rawExpiry)?.toLocal();
+  if (expiry == null) return 'duration unavailable';
+
+  final remaining = expiry.difference(DateTime.now());
+  if (remaining.inSeconds <= 0) return 'expired';
+  final days = remaining.inDays;
+  if (days > 0) return '$days ${days == 1 ? 'day' : 'days'} left';
+  final hours = remaining.inHours;
+  if (hours > 0) return '$hours ${hours == 1 ? 'hour' : 'hours'} left';
+  final minutes = remaining.inMinutes;
+  if (minutes > 0) {
+    return '$minutes ${minutes == 1 ? 'minute' : 'minutes'} left';
+  }
+  return 'Less than a minute left';
 }
 
 String _englishAccountError(Object error, String fallback) {
