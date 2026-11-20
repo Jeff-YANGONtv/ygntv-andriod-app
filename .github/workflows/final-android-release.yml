@@ -170,7 +170,7 @@ jobs:
           apk=''
           while IFS= read -r candidate; do
             cert_output="$("$apksigner" verify --verbose --print-certs "$candidate" 2>/dev/null)" || continue
-            printf '%s\n' "$cert_output" | grep -Fq "Signer #1 certificate SHA-256 digest: $expected_cert" || continue
+            printf '%s\n' "$cert_output" | grep -Fq "certificate SHA-256 digest: $expected_cert" || continue
             badging="$("$aapt" dump badging "$candidate" 2>/dev/null)" || continue
             printf '%s\n' "$badging" | grep -Fq "package: name='org.ygntv.ygntv_customer'" || continue
             printf '%s\n' "$badging" | grep -Fq "versionCode='6023'" || continue
@@ -190,7 +190,7 @@ jobs:
             printf 'Flutter returned %s, but a fully verified release APK was found at %s\n' "$flutter_status" "$apk"
           fi
           cert_output="$("$apksigner" verify --verbose --print-certs "$apk")"
-          printf '%s\n' "$cert_output" | grep -F "Signer #1 certificate SHA-256 digest: $expected_cert"
+          printf '%s\n' "$cert_output" | grep -F "certificate SHA-256 digest: $expected_cert"
           badging="$("$aapt" dump badging "$apk")"
           printf '%s\n' "$badging" | grep -F "package: name='org.ygntv.ygntv_customer'"
           printf '%s\n' "$badging" | grep -F "versionCode='6023'"
