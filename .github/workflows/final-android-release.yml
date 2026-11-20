@@ -72,10 +72,14 @@ jobs:
 
           path = Path("android/app/build.gradle.kts")
           text = path.read_text()
+          plugins_anchor = "plugins {\n"
+          if text.count(plugins_anchor) != 1:
+              raise SystemExit("unexpected Gradle plugins block")
+          text = text.replace(plugins_anchor, "import java.util.Properties\n\nplugins {\n", 1)
           plugin_anchor = "}\n\nandroid {\n"
           plugin_replacement = (
               "}\n\n"
-              "val signingProperties = java.util.Properties().apply {\n"
+              "val signingProperties = Properties().apply {\n"
               "    val signingPropertiesFile = rootProject.file(\"key.properties\")\n"
               "    if (signingPropertiesFile.exists()) {\n"
               "        signingPropertiesFile.inputStream().use(::load)\n"
