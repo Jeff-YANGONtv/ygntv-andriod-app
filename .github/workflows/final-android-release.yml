@@ -120,7 +120,8 @@ jobs:
       - name: Build and verify the production-package APK
         run: |
           set -euo pipefail
-          flutter build apk --build-dir=../build --release --split-per-abi --target-platform android-arm64 --android-project-arg=force-version-code-ignoring-abi=true
+          flutter config --build-dir=../build
+          flutter build apk --release --split-per-abi --target-platform android-arm64 --android-project-arg=force-version-code-ignoring-abi=true
           apk=../build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           test -s "$apk"
 
