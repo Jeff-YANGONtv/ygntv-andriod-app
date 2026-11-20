@@ -159,6 +159,14 @@ jobs:
           flutter_status=$?
           set -e
 
+          while IFS= read -r candidate; do
+            printf 'APK candidate: %s\n' "$candidate"
+            "$apksigner" verify --verbose --print-certs "$candidate" || true
+            "$aapt" dump badging "$candidate" 2>/dev/null | sed -n '1p' || true
+            candidate_abis="$(unzip -Z1 "$candidate" | awk -F/ '$1 == "lib" && NF > 2 { print $2 }' | sort -u | paste -sd, -)"
+            printf 'Candidate ABIs: %s\n' "$candidate_abis"
+          done < <(find .. -type f -name '*.apk' -size +0c -print | sort)
+
           apk=''
           while IFS= read -r candidate; do
             cert_output="$("$apksigner" verify --verbose --print-certs "$candidate" 2>/dev/null)" || continue
