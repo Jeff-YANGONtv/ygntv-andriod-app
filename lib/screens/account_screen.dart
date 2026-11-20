@@ -172,7 +172,7 @@ class _AccountScreenState extends State<AccountScreen> {
               children: [
                 Expanded(
                   child: _GridActionTile(
-                    icon: Icons.workspace_premium_rounded,
+                    iconName: 'subscription',
                     key: const ValueKey('account-action-subscription'),
                     title: 'Subscription',
                     subtitle: 'Plans & codes',
@@ -183,7 +183,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _GridActionTile(
-                    icon: Icons.system_update_rounded,
+                    iconName: 'app_update',
                     key: const ValueKey('account-action-update'),
                     title: 'App Update',
                     subtitle: 'Check for updates',
@@ -200,7 +200,7 @@ class _AccountScreenState extends State<AccountScreen> {
               children: [
                 Expanded(
                   child: _GridActionTile(
-                    icon: Icons.redeem_rounded,
+                    iconName: 'referral',
                     key: const ValueKey('account-action-referral'),
                     title: 'Refer & Earn',
                     subtitle: '500 Ks per approved Premium month',
@@ -211,7 +211,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _GridActionTile(
-                    icon: Icons.card_giftcard_rounded,
+                    iconName: 'daily_bonus',
                     key: const ValueKey('account-action-lucky-box'),
                     title: 'Daily Sign In Bonus',
                     subtitle: 'Choose your reward within 24 hours.',
@@ -229,7 +229,7 @@ class _AccountScreenState extends State<AccountScreen> {
             children: [
               _AccountMenuRow(
                 key: const ValueKey('account-menu-help'),
-                icon: Icons.support_agent_outlined,
+                iconName: 'help',
                 title: '24/7 Help',
                 subtitle: 'Chat with YGNTV customer care anytime.',
                 highlighted: true,
@@ -237,7 +237,7 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
               _AccountMenuRow(
                 key: const ValueKey('account-menu-connect'),
-                icon: Icons.public_outlined,
+                iconName: 'social',
                 title: 'Connect With Us',
                 subtitle: 'Official YGNTV social links',
                 onTap: () => _open(FollowUsScreen(service: widget.service)),
@@ -271,7 +271,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     key: const ValueKey('account-screen-time-card'),
                     child: _AccountMenuRow(
                       key: const ValueKey('account-menu-screen-time'),
-                      icon: Icons.schedule_outlined,
+                      iconName: 'screen_time',
                       title: 'Screen Time',
                       subtitle: 'Last 30 days · YGNTV only; other apps are not tracked.',
                       trailing: Text(
@@ -294,9 +294,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
                     collapsedShape: const Border(),
                     shape: const Border(),
-                    leading: const _AccountMenuIcon(
-                      icon: Icons.devices_outlined,
-                    ),
+                    leading: const _AccountMenuIcon(name: 'devices'),
                     title: const Text(
                       'Logged In Device',
                       style: TextStyle(
@@ -327,10 +325,10 @@ class _AccountScreenState extends State<AccountScreen> {
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 7,
                                   ),
-                                  leading: const Icon(
-                                    Icons.smartphone_outlined,
-                                    color: ygntvGold,
-                                    size: 20,
+                                  leading: _Account3DIcon(
+                                    name: 'smartphone',
+                                    keyName: 'device-${device.id}',
+                                    size: 18,
                                   ),
                                   title: Text(
                                     device.name,
@@ -577,10 +575,9 @@ class _ProfileCard extends StatelessWidget {
                             width: 28,
                             height: 24,
                           ),
-                          icon: const Icon(
-                            Icons.copy_rounded,
-                            color: ygntvGold,
-                            size: 13,
+                          icon: const _Account3DIcon(
+                            name: 'copy_uid',
+                            size: 15,
                           ),
                         ),
                       ],
@@ -655,13 +652,13 @@ class _ProfileHeaderClipper extends CustomClipper<Path> {
 class _GridActionTile extends StatelessWidget {
   const _GridActionTile({
     super.key,
-    required this.icon,
+    required this.iconName,
     required this.title,
     required this.subtitle,
     required this.onTap,
   });
 
-  final IconData icon;
+  final String iconName;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -683,7 +680,7 @@ class _GridActionTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
           child: Row(
             children: [
-              _AccountIconBadge(icon: icon, size: 33),
+              _AccountIconBadge(name: iconName, size: 33),
               const SizedBox(width: 7),
               Expanded(
                 child: Column(
@@ -731,9 +728,9 @@ class _GridActionTile extends StatelessWidget {
 }
 
 class _AccountIconBadge extends StatelessWidget {
-  const _AccountIconBadge({required this.icon, this.size = 36});
+  const _AccountIconBadge({required this.name, this.size = 36});
 
-  final IconData icon;
+  final String name;
   final double size;
 
   @override
@@ -745,7 +742,27 @@ class _AccountIconBadge extends StatelessWidget {
       color: const Color(0xFF2A1D17),
       border: Border.all(color: ygntvGold.withValues(alpha: .3)),
     ),
-    child: Icon(icon, color: ygntvGold, size: size * .58),
+    child: _Account3DIcon(name: name, size: size * .82),
+  );
+}
+
+class _Account3DIcon extends StatelessWidget {
+  const _Account3DIcon({required this.name, required this.size, this.keyName});
+
+  final String name;
+  final double size;
+  final String? keyName;
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+    'assets/account_icons/$name.png',
+    key: ValueKey('account-icon-${keyName ?? name}'),
+    width: size,
+    height: size,
+    fit: BoxFit.contain,
+    filterQuality: FilterQuality.medium,
+    excludeFromSemantics: true,
+    gaplessPlayback: true,
   );
 }
 
@@ -826,7 +843,7 @@ class _AccountMenuGroup extends StatelessWidget {
 class _AccountMenuRow extends StatelessWidget {
   const _AccountMenuRow({
     super.key,
-    required this.icon,
+    required this.iconName,
     required this.title,
     this.subtitle,
     this.trailing,
@@ -834,7 +851,7 @@ class _AccountMenuRow extends StatelessWidget {
     this.onTap,
   });
 
-  final IconData icon;
+  final String iconName;
   final String title;
   final String? subtitle;
   final Widget? trailing;
@@ -847,7 +864,7 @@ class _AccountMenuRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       child: Row(
         children: [
-          _AccountMenuIcon(icon: icon, highlighted: highlighted),
+          _AccountMenuIcon(name: iconName, highlighted: highlighted),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -898,9 +915,9 @@ class _AccountMenuRow extends StatelessWidget {
 }
 
 class _AccountMenuIcon extends StatelessWidget {
-  const _AccountMenuIcon({required this.icon, this.highlighted = false});
+  const _AccountMenuIcon({required this.name, this.highlighted = false});
 
-  final IconData icon;
+  final String name;
   final bool highlighted;
 
   @override
@@ -916,11 +933,7 @@ class _AccountMenuIcon extends StatelessWidget {
         color: (highlighted ? ygntvRed : ygntvGold).withValues(alpha: .28),
       ),
     ),
-    child: Icon(
-      icon,
-      color: highlighted ? const Color(0xFFFF9BA2) : ygntvGold,
-      size: 18,
-    ),
+    child: _Account3DIcon(name: name, size: 27),
   );
 }
 

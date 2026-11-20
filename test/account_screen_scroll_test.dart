@@ -648,6 +648,10 @@ void main() {
       await tester.tap(devicesTile);
       await tester.pump();
       expect(find.text('Test device 1'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('account-icon-device-1')),
+        findsOneWidget,
+      );
 
       await tester.drag(scrollable, const Offset(0, -2000));
       await tester.pumpAndSettle();
@@ -910,10 +914,19 @@ void main() {
     expect(find.text('Choose your reward within 24 hours.'), findsOneWidget);
     expect(find.text('Daily Sign In Bonus'), findsOneWidget);
     expect(find.text('Daily Sign In Bonus (Lucky Box)'), findsNothing);
-    expect(find.byIcon(Icons.workspace_premium_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.system_update_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.redeem_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.card_giftcard_rounded), findsOneWidget);
+    for (final iconName in [
+      'subscription',
+      'app_update',
+      'referral',
+      'daily_bonus',
+      'copy_uid',
+    ]) {
+      expect(
+        find.byKey(ValueKey('account-icon-$iconName')),
+        findsOneWidget,
+        reason: 'The $iconName 3D asset should render in Account.',
+      );
+    }
 
     final subscriptionCard = find.byKey(
       const ValueKey('account-action-subscription'),
@@ -1002,8 +1015,14 @@ void main() {
     await tester.ensureVisible(find.text('Sign Out'));
     expect(find.text('24/7 Help'), findsOneWidget);
     expect(find.text('Connect With Us'), findsOneWidget);
+    expect(find.byKey(const ValueKey('account-icon-help')), findsOneWidget);
+    expect(find.byKey(const ValueKey('account-icon-social')), findsOneWidget);
     await tester.ensureVisible(find.text('Screen Time'));
     expect(find.text('Screen Time'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('account-icon-screen_time')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('account-menu-group-support')),
       findsOneWidget,
@@ -1013,6 +1032,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Logged In Device'), findsOneWidget);
+    expect(find.byKey(const ValueKey('account-icon-devices')), findsOneWidget);
     expect(find.text('Sign Out'), findsOneWidget);
     await tester.ensureVisible(find.text('Sign Out'));
     await tester.tap(find.byKey(const ValueKey('account-sign-out-action')));
