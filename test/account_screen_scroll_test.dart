@@ -749,6 +749,7 @@ void main() {
   ) async {
     String? copiedUid;
     var updateChecks = 0;
+    var signOuts = 0;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async {
@@ -776,7 +777,9 @@ void main() {
           body: AccountScreen(
             service: _ProfileScrollService(),
             session: _session,
-            onSignOut: () async {},
+            onSignOut: () async {
+              signOuts++;
+            },
             onCheckForUpdates: () async {
               updateChecks++;
             },
@@ -789,11 +792,17 @@ void main() {
     expect(find.text('Test Viewer'), findsOneWidget);
     expect(find.text('viewer@example.com'), findsOneWidget);
     expect(find.text('UID: ${_session.userId}'), findsOneWidget);
+    expect(find.text('FREE MEMBER'), findsOneWidget);
     expect(find.textContaining('welcome_trial'), findsNothing);
     final profileAvatar = find.byKey(const ValueKey('account-profile-avatar'));
+    final profileCard = find.byKey(const ValueKey('account-profile-card'));
     expect(
       tester.getRect(profileAvatar).center.dx,
-      lessThan(tester.getRect(find.text('Test Viewer')).center.dx),
+      closeTo(tester.getRect(profileCard).center.dx, 1),
+    );
+    expect(
+      tester.getRect(find.text('Test Viewer')).center.dx,
+      closeTo(tester.getRect(profileCard).center.dx, 1),
     );
     expect(find.byTooltip('Copy UID'), findsOneWidget);
     expect(
@@ -902,8 +911,22 @@ void main() {
     await tester.ensureVisible(find.text('Sign Out'));
     expect(find.text('24/7 Help'), findsOneWidget);
     expect(find.text('Connect With Us'), findsOneWidget);
+    await tester.ensureVisible(find.text('Screen Time'));
+    expect(find.text('Screen Time'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('account-menu-group-support')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('account-menu-group-activity')),
+      findsOneWidget,
+    );
     expect(find.text('Logged In Device'), findsOneWidget);
     expect(find.text('Sign Out'), findsOneWidget);
+    await tester.ensureVisible(find.text('Sign Out'));
+    await tester.tap(find.byKey(const ValueKey('account-sign-out-action')));
+    await tester.pumpAndSettle();
+    expect(signOuts, 1);
   });
 
   testWidgets(
@@ -928,6 +951,16 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+
+        final profileCard = find.byKey(const ValueKey('account-profile-card'));
+        final profileAvatar = find.byKey(
+          const ValueKey('account-profile-avatar'),
+        );
+        expect(
+          tester.getRect(profileAvatar).center.dx,
+          closeTo(tester.getRect(profileCard).center.dx, 1),
+        );
+        expect(tester.takeException(), isNull);
 
         final scrollable = find.byType(Scrollable).first;
         final position = tester.state<ScrollableState>(scrollable).position;
