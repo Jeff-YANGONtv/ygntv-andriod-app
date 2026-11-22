@@ -655,7 +655,7 @@ void main() {
     expect(find.text('Subscription expired'), findsOneWidget);
     expect(find.text('Download completed'), findsOneWidget);
     expect(find.text('Customer support reply'), findsNothing);
-    expect(find.text('Download failed'), findsNothing);
+    expect(find.text('Download failed'), findsOneWidget);
   });
 
   testWidgets('home notification bell shows the allowed unread count', (
@@ -768,7 +768,8 @@ void main() {
         find.byKey(const ValueKey('customer-app-sticky-header')),
         findsOneWidget,
       );
-      expect(find.byType(NavigationBar), findsOneWidget);
+      final bottom = find.byKey(const ValueKey('customer-bottom-nav'));
+      expect(bottom, findsOneWidget);
       await tester.drag(
         find.byType(CustomScrollView).first,
         const Offset(0, -500),
@@ -779,13 +780,19 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(find.text('Movies'));
+      await tester.tap(find.byKey(const ValueKey('customer-nav-movies')));
       await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('customer-app-sticky-header')),
         findsOneWidget,
       );
-      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byKey(const ValueKey('customer-bottom-nav')), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('catalog-page-title')))
+            .data,
+        'Movie',
+      );
     },
   );
 
@@ -843,7 +850,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(FloatingActionButton), findsNothing);
 
-      final helpEntry = find.text('24/7 Help').first;
+      final helpEntry = find.text('24/7 Support').first;
       await tester.scrollUntilVisible(
         helpEntry,
         250,

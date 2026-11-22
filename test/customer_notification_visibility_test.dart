@@ -6,16 +6,15 @@ TvNotificationEntry _entry(
   String type, {
   String? readAt,
   String? title,
-}) =>
-    TvNotificationEntry(
-      id: id,
-      title: title ?? type,
-      message: '',
-      type: type,
-      linkUrl: null,
-      createdAt: null,
-      readAt: readAt,
-    );
+}) => TvNotificationEntry(
+  id: id,
+  title: title ?? type,
+  message: '',
+  type: type,
+  linkUrl: null,
+  createdAt: null,
+  readAt: readAt,
+);
 
 void main() {
   test(
@@ -36,11 +35,15 @@ void main() {
         unreadCount: 6,
       );
 
-      expect(
-        feed.visibleNotifications.map((item) => item.id),
-        ['blog', 'blog-category', 'purchase', 'expired', 'download'],
-      );
-      expect(feed.visibleUnreadCount, 4);
+      expect(feed.visibleNotifications.map((item) => item.id), [
+        'blog',
+        'blog-category',
+        'purchase',
+        'expired',
+        'download',
+        'failed',
+      ]);
+      expect(feed.visibleUnreadCount, 5);
     },
   );
 

@@ -141,17 +141,17 @@ void main() {
     );
   });
 
-  testWidgets('Blog deep link selects the Blog tab', (tester) async {
+  testWidgets('Blog deep link without a slug falls back to Home', (
+    tester,
+  ) async {
     final home = await _mountHome(tester);
     home.event.value = const AppDeepLink(
       destination: AppDeepLinkDestination.blog,
     );
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('Stories, updates, and notes from YGNTV.'),
-      findsOneWidget,
-    );
+    expect(find.text('Stories worth staying up for.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('customer-nav-blog')), findsNothing);
   });
 
   testWidgets('exact Blog deep link opens the story inside the app', (
@@ -169,7 +169,7 @@ void main() {
     expect(find.text('The article opens inside the app.'), findsOneWidget);
   });
 
-  testWidgets('tapping a Blog feed card opens its native article screen', (
+  testWidgets('tapping a home Blog card opens its native article screen', (
     tester,
   ) async {
     const post = TvBlogPost(
@@ -188,8 +188,6 @@ void main() {
       blogPosts: const [post],
       article: post,
     );
-    await tester.tap(find.text('Blog').first);
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Featured story'));
     await tester.pumpAndSettle();
 

@@ -653,24 +653,21 @@ class TvNotificationEntry {
       RegExp(r'[^a-z0-9]'),
       '',
     );
-    if (_customerVisibleTypes.contains(normalizedType)) return true;
-    if (normalizedType.contains('subscription') &&
-        normalizedType.contains('expired')) {
-      return true;
+    if (normalizedType.isNotEmpty) {
+      if (_customerVisibleTypes.contains(normalizedType)) return true;
+      if ((normalizedType.contains('premium') ||
+              normalizedType.contains('subscription')) &&
+          normalizedType.contains('expired')) {
+        return true;
+      }
+      if ((normalizedType.contains('payment') ||
+              normalizedType.contains('purchas')) &&
+          _approvedPaymentStates.any(normalizedType.endsWith)) {
+        return true;
+      }
+      return normalizedType.contains('download') &&
+          _downloadStatusStates.any(normalizedType.endsWith);
     }
-    final isCompletedSubscriptionPurchase =
-        normalizedType.contains('subscription') &&
-        (normalizedType.contains('purchas') ||
-            normalizedType.contains('payment')) &&
-        (normalizedType.contains('complet') ||
-            normalizedType.contains('success') ||
-            normalizedType.contains('paid'));
-    if (isCompletedSubscriptionPurchase) return true;
-    if (normalizedType.contains('download') &&
-        normalizedType.contains('complet')) {
-      return true;
-    }
-    if (normalizedType.isNotEmpty) return false;
 
     final text = '$title $message'.toLowerCase();
     if (text.contains('blog') &&
@@ -678,13 +675,16 @@ class TvNotificationEntry {
         (text.contains('new') || text.contains('published'))) {
       return true;
     }
-    if (text.contains('subscription') && text.contains('expired')) return true;
-    if (text.contains('subscription') &&
-        (text.contains('purchase') || text.contains('payment')) &&
-        (text.contains('complete') || text.contains('success'))) {
+    if ((text.contains('premium') || text.contains('subscription')) &&
+        text.contains('expired')) {
       return true;
     }
-    return text.contains('download') && text.contains('complete');
+    final isApprovedPayment =
+        (text.contains('payment') || text.contains('purchase')) &&
+        _approvedPaymentStates.any(text.contains);
+    if (isApprovedPayment) return true;
+    return text.contains('download') &&
+        _downloadStatusStates.any(text.contains);
   }
 
   static const _customerVisibleTypes = <String>{
@@ -694,15 +694,61 @@ class TvNotificationEntry {
     'blogpostcreated',
     'blogpostpublished',
     'blogpublished',
+    'paymentapproved',
+    'paymentcompleted',
+    'paymentapproval',
+    'subscriptionpaymentapproved',
     'subscriptionpurchasecompleted',
+    'subscriptionpurchaseapproved',
     'subscriptionpurchased',
+    'premiumsubscriptionpaymentapproved',
+    'premiumsubscriptionpaymentcompleted',
+    'premiumsubscriptionpurchaseapproved',
     'subscriptionpaymentcompleted',
     'premiumsubscriptionpurchasecompleted',
     'premiumsubscriptionpurchased',
     'subscriptionexpired',
     'premiumsubscriptionexpired',
+    'premiumexpired',
+    'downloadstarted',
+    'downloadprogress',
+    'downloading',
+    'downloadstatus',
     'downloadcomplete',
     'downloadcompleted',
+    'downloadfailed',
+    'downloadcancelled',
+    'downloadcanceled',
+    'downloadpaused',
+    'downloadresumed',
+  };
+
+  static const _approvedPaymentStates = <String>{
+    'approved',
+    'approval',
+    'complete',
+    'completed',
+    'paid',
+    'purchased',
+    'success',
+    'successful',
+  };
+
+  static const _downloadStatusStates = <String>{
+    'start',
+    'started',
+    'queued',
+    'pending',
+    'progress',
+    'downloading',
+    'complete',
+    'completed',
+    'failed',
+    'cancelled',
+    'canceled',
+    'paused',
+    'resumed',
+    'status',
   };
 
   factory TvNotificationEntry.fromJson(Map<String, dynamic> json) =>
@@ -1594,6 +1640,26 @@ class AuthService {
     );
   }
 
+  Future<TvNotificationFeed> dismissReadNotifications(
+    TvNotificationFeed feed,
+  ) async {
+    final dismissedIds = feed.visibleNotifications
+        .where((item) => item.isRead)
+        .map((item) => item.id)
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    if (dismissedIds.isEmpty) return feed;
+    await _localNotifications.dismissReadNotifications(dismissedIds);
+    return TvNotificationFeed(
+      notifications: feed.notifications
+          .where((item) => !dismissedIds.contains(item.id))
+          .toList(growable: false),
+      unreadCount: feed.unreadCount,
+      hasServerUnreadCount: feed.hasServerUnreadCount,
+      localUnreadCount: feed.localUnreadCount,
+    );
+  }
+
   Future<void> recordLocalNotification({
     required String title,
     required String message,
@@ -1616,16 +1682,20 @@ class AuthService {
     TvNotificationFeed serverFeed,
   ) async {
     try {
+      final dismissedIds = await _localNotifications
+          .getDismissedNotificationIds();
       final localRows = await _localNotifications.getNotifications();
       final localEntries = localRows
           .map(TvNotificationEntry.fromJson)
           .toList(growable: false);
-      final notifications = [...serverFeed.notifications, ...localEntries];
+      final notifications = [...serverFeed.notifications, ...localEntries]
+          .where((item) => !dismissedIds.contains(item.id))
+          .toList(growable: false);
       notifications.sort(
         (a, b) => _notificationDate(b).compareTo(_notificationDate(a)),
       );
-      final localUnreadCount = localEntries
-          .where((item) => !item.isRead)
+      final localUnreadCount = notifications
+          .where((item) => item.isLocal && !item.isRead)
           .length;
       return TvNotificationFeed(
         notifications: notifications,

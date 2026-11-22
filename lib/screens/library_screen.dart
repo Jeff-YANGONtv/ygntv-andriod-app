@@ -55,6 +55,54 @@ class LibraryScreen extends StatelessWidget {
   );
 }
 
+class ActivityHistoryScreen extends StatelessWidget {
+  const ActivityHistoryScreen({required this.service, super.key});
+
+  final AuthService service;
+
+  @override
+  Widget build(BuildContext context) => DefaultTabController(
+    length: 4,
+    child: Scaffold(
+      key: const ValueKey('activity-history-screen'),
+      backgroundColor: ygntvBackground,
+      appBar: AppBar(
+        title: const Text('Activity History'),
+        bottom: const TabBar(
+          isScrollable: true,
+          tabs: [
+            Tab(text: 'Watch List'),
+            Tab(text: 'Watched'),
+            Tab(text: 'Downloaded'),
+            Tab(text: 'Subscription History'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        children: [
+          _LibraryList(service: service, mode: _LibraryMode.saved),
+          _LibraryList(service: service, mode: _LibraryMode.history),
+          _DownloadsList(service: service),
+          const _UnavailableSubscriptionHistory(),
+        ],
+      ),
+    ),
+  );
+}
+
+class _UnavailableSubscriptionHistory extends StatelessWidget {
+  const _UnavailableSubscriptionHistory();
+
+  @override
+  Widget build(BuildContext context) => const _ScrollableMessage(
+    child: _InfoState(
+      icon: Icons.receipt_long_outlined,
+      title: 'Subscription history is unavailable',
+      copy: 'This app version does not receive subscription history records.',
+    ),
+  );
+}
+
 enum _LibraryMode { continueWatching, history, saved }
 
 class _DownloadsList extends StatefulWidget {

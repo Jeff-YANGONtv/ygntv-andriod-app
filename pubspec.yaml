@@ -13,10 +13,10 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # Read more about Android versioning at https://developer.android.com/studio/build/versioning
 # In iOS, version is used as CFBundleShortVersionString while build number is used as CFBundleVersion.
 # Read more about iOS versioning at
-# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeyReference.html
 # In Windows, the major, minor, and patch parts
 # of the product and file versions while the build suffix.
-version: 1.1.8+6023
+version: 1.1.9+6025
 
 environment:
   sdk: ^3.13.7
@@ -72,6 +72,7 @@ flutter:
   assets:
     - assets/brand/yangon-tv-logo.png
     - assets/account_icons/
+    - assets/navigation_icons/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

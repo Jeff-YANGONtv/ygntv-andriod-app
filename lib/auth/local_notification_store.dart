@@ -69,6 +69,24 @@ class LocalNotificationStore {
     }
   });
 
+  Future<Set<String>> getDismissedNotificationIds() => _run(() async {
+    final data = await _read();
+    return _dismissedIds(data).toSet();
+  });
+
+  Future<void> dismissReadNotifications(Iterable<String> ids) =>
+      _run(() async {
+        final data = await _read();
+        final dismissed = _dismissedIds(data).toSet()
+          ..addAll(ids.where((id) => id.isNotEmpty));
+        final values = dismissed.toList(growable: false);
+        if (values.length > 500) {
+          values.removeRange(0, values.length - 500);
+        }
+        data['dismissed_notification_ids'] = values;
+        await _write(data);
+      });
+
   Future<void> trackDownload(int id) => _run(() async {
     final data = await _read();
     final ids = _downloadIds(data);
@@ -164,6 +182,12 @@ class LocalNotificationStore {
         .map((value) => value.toInt())
         .toSet()
         .toList();
+  }
+
+  List<String> _dismissedIds(Map<String, dynamic> data) {
+    final values = data['dismissed_notification_ids'];
+    if (values is! List) return <String>[];
+    return values.whereType<String>().where((value) => value.isNotEmpty).toList();
   }
 
   String _newId() =>

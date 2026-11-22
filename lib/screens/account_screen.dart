@@ -3,10 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../auth/auth_service.dart';
 import '../widgets/ygntv_brand.dart';
-import 'daily_signin_wheel_screen.dart';
 import 'follow_us_screen.dart';
-import 'referral_wallet_screen.dart';
-import 'subscription_screen.dart';
+import 'library_screen.dart';
 import 'support_chat_screen.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -164,65 +162,22 @@ class _AccountScreenState extends State<AccountScreen> {
             },
           ),
           const SizedBox(height: 10),
-          const _AccountSectionHeading(title: 'QUICK ACTIONS'),
-          const SizedBox(height: 7),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _GridActionTile(
-                    iconName: 'subscription',
-                    key: const ValueKey('account-action-subscription'),
-                    title: 'Subscription',
-                    subtitle: 'Plans & codes',
-                    onTap: () =>
-                        _open(SubscriptionScreen(service: widget.service)),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _GridActionTile(
-                    iconName: 'app_update',
-                    key: const ValueKey('account-action-update'),
-                    title: 'App Update',
-                    subtitle: 'Check for updates',
-                    onTap: () => widget.onCheckForUpdates?.call(),
-                  ),
-                ),
-              ],
-            ),
+          _AccountMenuGroup(
+            key: const ValueKey('account-menu-group-activity-history'),
+            title: 'ACTIVITY HISTORY',
+            children: [
+              _AccountMenuRow(
+                key: const ValueKey('account-menu-activity-history'),
+                iconName: 'screen_time',
+                title: 'Activity History',
+                subtitle:
+                    'Watch List, Watched, Downloaded and Subscription History.',
+                onTap: () =>
+                    _open(ActivityHistoryScreen(service: widget.service)),
+              ),
+            ],
           ),
-          const SizedBox(height: 7),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: _GridActionTile(
-                    iconName: 'referral',
-                    key: const ValueKey('account-action-referral'),
-                    title: 'Refer & Earn',
-                    subtitle: '500 Ks per approved Premium month',
-                    onTap: () =>
-                        _open(ReferralWalletScreen(service: widget.service)),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _GridActionTile(
-                    iconName: 'daily_bonus',
-                    key: const ValueKey('account-action-lucky-box'),
-                    title: 'Daily Sign In Bonus',
-                    subtitle: 'Choose your reward within 24 hours.',
-                    onTap: () =>
-                        _open(DailySignInWheelScreen(service: widget.service)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 13),
+          const SizedBox(height: 12),
           _AccountMenuGroup(
             key: const ValueKey('account-menu-group-support'),
             title: 'SUPPORT & CONTACT',
@@ -230,7 +185,7 @@ class _AccountScreenState extends State<AccountScreen> {
               _AccountMenuRow(
                 key: const ValueKey('account-menu-help'),
                 iconName: 'help',
-                title: '24/7 Help',
+                title: '24/7 Support',
                 subtitle: 'Chat with YGNTV customer care anytime.',
                 highlighted: true,
                 onTap: () => _open(SupportChatScreen(service: widget.service)),
@@ -251,40 +206,32 @@ class _AccountScreenState extends State<AccountScreen> {
               if (!snapshot.hasData &&
                   snapshot.connectionState == ConnectionState.waiting) {
                 return const _AccountMenuGroup(
-                  key: ValueKey('account-menu-group-activity'),
+                  key: ValueKey('account-menu-group-devices'),
                   title: 'ACCOUNT ACTIVITY',
-                  children: [SizedBox(height: 54), SizedBox(height: 54)],
+                  children: [SizedBox(height: 54)],
                 );
               }
-              if (!snapshot.hasData) return const SizedBox.shrink();
+              if (!snapshot.hasData) {
+                return _AccountMenuGroup(
+                  key: const ValueKey('account-menu-group-devices'),
+                  title: 'ACCOUNT ACTIVITY',
+                  children: [
+                    _AccountMenuRow(
+                      key: const ValueKey('account-menu-devices'),
+                      iconName: 'devices',
+                      title: 'Logged In Devices',
+                      subtitle: 'Could not load devices. Tap to retry.',
+                      onTap: _reload,
+                    ),
+                  ],
+                );
+              }
               final profile = snapshot.data!;
-              final minutes = profile.screenTimeLast30DaysSeconds ~/ 60;
-              final duration = minutes >= 60
-                  ? '${minutes ~/ 60} hr ${minutes % 60} min'
-                  : '$minutes min';
               final devices = profile.devices;
               return _AccountMenuGroup(
-                key: const ValueKey('account-menu-group-activity'),
+                key: const ValueKey('account-menu-group-devices'),
                 title: 'ACCOUNT ACTIVITY',
                 children: [
-                  KeyedSubtree(
-                    key: const ValueKey('account-screen-time-card'),
-                    child: _AccountMenuRow(
-                      key: const ValueKey('account-menu-screen-time'),
-                      iconName: 'screen_time',
-                      title: 'Screen Time',
-                      subtitle: 'Last 30 days · YGNTV only; other apps are not tracked.',
-                      trailing: Text(
-                        duration,
-                        textAlign: TextAlign.end,
-                        style: const TextStyle(
-                          color: ygntvGold,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
                   ExpansionTile(
                     key: const PageStorageKey<String>(
                       'account-signed-in-devices',
@@ -296,7 +243,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     shape: const Border(),
                     leading: const _AccountMenuIcon(name: 'devices'),
                     title: const Text(
-                      'Logged In Device',
+                      'Logged In Devices',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
@@ -626,103 +573,6 @@ class _ProfileHeaderClipper extends CustomClipper<Path> {
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }
 
-class _GridActionTile extends StatelessWidget {
-  const _GridActionTile({
-    super.key,
-    required this.iconName,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final String iconName;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: ygntvPanel,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(15),
-      side: BorderSide(color: ygntvGold.withValues(alpha: .16)),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      borderRadius: BorderRadius.circular(15),
-      onTap: onTap,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 72),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
-          child: Row(
-            children: [
-              _AccountIconBadge(name: iconName, size: 33),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        height: 1.14,
-                        letterSpacing: -0.1,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: ygntvMuted,
-                        fontSize: 9,
-                        height: 1.18,
-                        letterSpacing: -0.1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 2),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: ygntvRed,
-                size: 17,
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-class _AccountIconBadge extends StatelessWidget {
-  const _AccountIconBadge({required this.name, this.size = 36});
-
-  final String name;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(size * .32),
-      color: const Color(0xFF2A1D17),
-      border: Border.all(color: ygntvGold.withValues(alpha: .3)),
-    ),
-    child: _Account3DIcon(name: name, size: size * .82),
-  );
-}
-
 class _Account3DIcon extends StatelessWidget {
   const _Account3DIcon({required this.name, required this.size, this.keyName});
 
@@ -823,7 +673,6 @@ class _AccountMenuRow extends StatelessWidget {
     required this.iconName,
     required this.title,
     this.subtitle,
-    this.trailing,
     this.highlighted = false,
     this.onTap,
   });
@@ -831,7 +680,6 @@ class _AccountMenuRow extends StatelessWidget {
   final String iconName;
   final String title;
   final String? subtitle;
-  final Widget? trailing;
   final bool highlighted;
   final VoidCallback? onTap;
 
@@ -873,10 +721,7 @@ class _AccountMenuRow extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 6),
-            trailing!,
-          ] else if (onTap != null) ...[
+          if (onTap != null) ...[
             const SizedBox(width: 5),
             const Icon(Icons.chevron_right_rounded, color: ygntvRed, size: 19),
           ],

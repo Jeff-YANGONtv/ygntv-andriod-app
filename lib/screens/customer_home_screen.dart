@@ -12,11 +12,13 @@ import '../widgets/ygntv_brand.dart';
 import 'account_screen.dart';
 import 'blog_screen.dart';
 import 'catalog_browser_screen.dart';
+import 'daily_signin_wheel_screen.dart';
 import 'library_screen.dart';
 import 'media_actions.dart';
 import 'media_detail_screen.dart';
 import 'manual_transfer_screen.dart';
 import 'notifications_screen.dart';
+import 'referral_wallet_screen.dart';
 import 'subscription_screen.dart';
 import 'support_chat_screen.dart';
 
@@ -41,6 +43,7 @@ class CustomerHomeScreen extends StatefulWidget {
 class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     with WidgetsBindingObserver {
   int _selectedTab = 0;
+  bool _quickActionsExpanded = false;
   late Future<List<CatalogItem>> _movies;
   late Future<List<CatalogItem>> _series;
   late Future<List<TvLibraryEntry>> _continueWatching;
@@ -419,6 +422,18 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     );
   }
 
+  void _selectTab(int tab) {
+    setState(() {
+      _selectedTab = tab;
+      _quickActionsExpanded = false;
+    });
+  }
+
+  void _openShortcut(Widget page) {
+    setState(() => _quickActionsExpanded = false);
+    Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => page));
+  }
+
   void _consumeDeepLinkEvent() {
     final event = widget.deepLinkEvent;
     final link = event?.value;
@@ -443,7 +458,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
         setState(() => _selectedTab = 1);
         return;
       case AppDeepLinkDestination.blog:
-        setState(() => _selectedTab = 3);
+        setState(() => _selectedTab = 0);
         if (link.slug != null) {
           await Navigator.of(context).push<void>(
             MaterialPageRoute(
@@ -456,7 +471,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
         }
         return;
       case AppDeepLinkDestination.account:
-        setState(() => _selectedTab = 4);
+        setState(() => _selectedTab = 3);
         return;
       case AppDeepLinkDestination.library:
         const libraryTabs = {
@@ -611,8 +626,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints.tightFor(width: 42, height: 42),
           icon: Badge(
-            isLabelVisible:
-                (_notificationFeed?.visibleUnreadCount ?? 0) > 0,
+            isLabelVisible: (_notificationFeed?.visibleUnreadCount ?? 0) > 0,
             label: Text(
               (_notificationFeed?.visibleUnreadCount ?? 0) > 99
                   ? '99+'
@@ -626,7 +640,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
         ),
         IconButton(
           tooltip: 'Account',
-          onPressed: () => setState(() => _selectedTab = 4),
+          onPressed: () => _selectTab(3),
           visualDensity: VisualDensity.compact,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints.tightFor(width: 42, height: 42),
@@ -647,40 +661,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       ],
     ),
     body: SafeArea(top: false, child: _selectedView()),
-    bottomNavigationBar: NavigationBar(
-      height: 67,
-      backgroundColor: const Color(0xFF111116),
-      indicatorColor: ygntvRed.withValues(alpha: .18),
-      selectedIndex: _selectedTab,
-      onDestinationSelected: (value) => setState(() => _selectedTab = value),
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home_rounded),
-          label: 'Home',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.movie_outlined),
-          selectedIcon: Icon(Icons.movie_rounded),
-          label: 'Movies',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.live_tv_outlined),
-          selectedIcon: Icon(Icons.live_tv_rounded),
-          label: 'Series',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.article_outlined),
-          selectedIcon: Icon(Icons.article_rounded),
-          label: 'Blog',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.person_outline_rounded),
-          selectedIcon: Icon(Icons.person_rounded),
-          label: 'Account',
-        ),
-      ],
-    ),
+    bottomNavigationBar: _buildBottomNavigationBar(),
   );
 
   Widget _selectedView() => switch (_selectedTab) {
@@ -701,7 +682,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       onOpenItem: _openItem,
       onRefresh: _refresh,
     ),
-    3 => BlogScreen(service: widget.authService),
     _ => AccountScreen(
       service: widget.authService,
       session: widget.session,
@@ -709,6 +689,231 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       onCheckForUpdates: () => _checkForAppUpdate(manual: true),
     ),
   };
+
+  Widget _buildBottomNavigationBar() => SafeArea(
+    top: false,
+    child: SizedBox(
+      height: _quickActionsExpanded ? 144 : 72,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 72,
+            child: Container(
+              key: const ValueKey('customer-bottom-nav'),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111116),
+                border: Border(
+                  top: BorderSide(color: ygntvRed.withValues(alpha: .28)),
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x44000000),
+                    blurRadius: 12,
+                    offset: Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _bottomNavItem(
+                      title: 'Home',
+                      asset: 'assets/navigation_icons/home_nav.png',
+                      tab: 0,
+                    ),
+                  ),
+                  Expanded(
+                    child: _bottomNavItem(
+                      title: 'Movies',
+                      asset: 'assets/navigation_icons/movies_nav.png',
+                      tab: 1,
+                    ),
+                  ),
+                  const SizedBox(width: 58),
+                  Expanded(
+                    child: _bottomNavItem(
+                      title: 'Series',
+                      asset: 'assets/navigation_icons/series_nav.png',
+                      tab: 2,
+                    ),
+                  ),
+                  Expanded(
+                    child: _bottomNavItem(
+                      title: 'Account',
+                      asset: 'assets/navigation_icons/account_nav.png',
+                      tab: 3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_quickActionsExpanded)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 72,
+              height: 62,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _quickAction(
+                    title: 'Premium Subscription',
+                    asset: 'assets/account_icons/subscription.png',
+                    keyName: 'subscription',
+                    page: SubscriptionScreen(service: widget.authService),
+                  ),
+                  _quickAction(
+                    title: 'Referral',
+                    asset: 'assets/account_icons/referral.png',
+                    keyName: 'referral',
+                    page: ReferralWalletScreen(service: widget.authService),
+                  ),
+                  _quickAction(
+                    title: 'Daily Sign In Bonus',
+                    asset: 'assets/account_icons/daily_bonus.png',
+                    keyName: 'daily-bonus',
+                    page: DailySignInWheelScreen(service: widget.authService),
+                  ),
+                ],
+              ),
+            ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 10,
+            child: Center(
+              child: Tooltip(
+                message: _quickActionsExpanded
+                    ? 'Close quick actions'
+                    : 'More actions',
+                child: Semantics(
+                  label: _quickActionsExpanded
+                      ? 'Close quick actions'
+                      : 'More actions',
+                  button: true,
+                  child: Material(
+                    color: ygntvRed,
+                    elevation: 8,
+                    shadowColor: ygntvRed.withValues(alpha: .48),
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      key: const ValueKey('customer-nav-quick-actions'),
+                      customBorder: const CircleBorder(),
+                      onTap: () => setState(
+                        () => _quickActionsExpanded = !_quickActionsExpanded,
+                      ),
+                      child: SizedBox(
+                        width: 52,
+                        height: 52,
+                        child: Center(
+                          child: AnimatedRotation(
+                            turns: _quickActionsExpanded ? .125 : 0,
+                            duration: const Duration(milliseconds: 220),
+                            child: const Icon(
+                              Icons.add_rounded,
+                              color: Colors.white,
+                              size: 31,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _bottomNavItem({
+    required String title,
+    required String asset,
+    required int tab,
+  }) {
+    final selected = _selectedTab == tab;
+    return Tooltip(
+      message: title,
+      child: Semantics(
+        label: title,
+        button: true,
+        selected: selected,
+        child: InkWell(
+          key: ValueKey('customer-nav-${title.toLowerCase()}'),
+          onTap: () => _selectTab(tab),
+          borderRadius: BorderRadius.circular(18),
+          child: SizedBox(
+            height: 72,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedScale(
+                  scale: selected ? 1.08 : 1,
+                  duration: const Duration(milliseconds: 180),
+                  child: Image.asset(
+                    asset,
+                    width: 38,
+                    height: 38,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.medium,
+                    excludeFromSemantics: true,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: selected ? 5 : 3,
+                  height: selected ? 5 : 3,
+                  decoration: BoxDecoration(
+                    color: selected ? ygntvGold : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _quickAction({
+    required String title,
+    required String asset,
+    required String keyName,
+    required Widget page,
+  }) => SizedBox(
+    width: 76,
+    height: 62,
+    child: Tooltip(
+      message: title,
+      child: Semantics(
+        label: title,
+        button: true,
+        child: InkWell(
+          key: ValueKey('customer-nav-$keyName'),
+          onTap: () => _openShortcut(page),
+          customBorder: const CircleBorder(),
+          child: Center(
+            child: Image.asset(
+              asset,
+              width: 42,
+              height: 42,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.medium,
+              excludeFromSemantics: true,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
   Widget _homeView() {
     final displayName = widget.session.name.trim().isEmpty

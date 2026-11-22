@@ -188,6 +188,24 @@ class _NotificationsScreenState extends State<NotificationsScreen>
     }
   }
 
+  Future<void> _clearRead(TvNotificationFeed feed) async {
+    if (_busy || !feed.visibleNotifications.any((item) => item.isRead)) return;
+    setState(() => _busy = true);
+    try {
+      final next = await widget.service.dismissReadNotifications(feed);
+      if (mounted) {
+        setState(() {
+          _lastKnownFeed = next;
+          _feed = Future.value(next);
+        });
+      }
+    } catch (error) {
+      if (mounted) _message(error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _openLink(String? value) async {
     if (value == null) return;
     final uri = Uri.tryParse(value);
@@ -289,6 +307,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
           final feed = snapshot.data!;
           final notifications = feed.visibleNotifications;
           final hasUnreadItems = notifications.any((item) => !item.isRead);
+          final hasReadItems = notifications.any((item) => item.isRead);
           final summary = [
             if (notifications.any((item) => !item.isRead))
               '${notifications.where((item) => !item.isRead).length} unread',
@@ -324,6 +343,12 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                       TextButton(
                         onPressed: _busy ? null : () => _markAll(feed),
                         child: const Text('Mark all read'),
+                      ),
+                    if (hasReadItems)
+                      TextButton(
+                        key: const ValueKey('notifications-clear-read'),
+                        onPressed: _busy ? null : () => _clearRead(feed),
+                        child: const Text('Clear read'),
                       ),
                   ],
                 );
