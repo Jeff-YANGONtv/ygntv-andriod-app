@@ -1,4 +1,4 @@
-# ygntv_customer
+# YangonTV Streaming Andriod Apk
 
 A new Flutter project.
 
