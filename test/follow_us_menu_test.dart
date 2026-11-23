@@ -25,6 +25,10 @@ class _FollowUsService extends AuthService {
   );
 
   @override
+  Future<List<TvLibraryEntry>> getWatchHistory({int page = 1}) async =>
+      const [];
+
+  @override
   Future<List<TvSocialLink>> getSocialLinks() async => const [
     TvSocialLink(
       id: 1,
@@ -38,38 +42,36 @@ class _FollowUsService extends AuthService {
 }
 
 void main() {
-  testWidgets('Account menu opens Follow Us with configured social links', (
-    tester,
-  ) async {
-    final service = _FollowUsService();
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData.dark(useMaterial3: true),
-        home: AccountScreen(
-          service: service,
-          session: const AuthSession(
-            token: 'test-token',
-            userId: '1',
-            name: 'Test Viewer',
-            email: 'viewer@example.com',
+  testWidgets(
+    'Account menu opens Connect With Us with configured social links',
+    (tester) async {
+      final service = _FollowUsService();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(useMaterial3: true),
+          home: AccountScreen(
+            service: service,
+            session: const AuthSession(
+              token: 'test-token',
+              userId: '1',
+              name: 'Test Viewer',
+              email: 'viewer@example.com',
+            ),
+            onSignOut: () async {},
           ),
-          onSignOut: () async {},
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(
-      find.text('Follow Us'),
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('Follow Us'), findsOneWidget);
-    await tester.tap(find.text('Follow Us'));
-    await tester.pumpAndSettle();
+      final connectWithUs = find.byKey(const ValueKey('account-menu-connect'));
+      await tester.ensureVisible(connectWithUs);
+      expect(find.text('Connect With Us'), findsOneWidget);
+      await tester.tap(connectWithUs);
+      await tester.pumpAndSettle();
 
-    expect(find.text('Official YGNTV channels'), findsOneWidget);
-    expect(find.text('Telegram'), findsOneWidget);
-    expect(find.text('https://t.me/yangontv'), findsOneWidget);
-  });
+      expect(find.text('Official YGNTV channels'), findsOneWidget);
+      expect(find.text('Telegram'), findsOneWidget);
+      expect(find.text('https://t.me/yangontv'), findsOneWidget);
+    },
+  );
 }

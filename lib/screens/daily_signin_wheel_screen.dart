@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -61,6 +62,7 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
     with SingleTickerProviderStateMixin {
   late Future<Map<String, dynamic>> _overview;
   late final AnimationController _boxController;
+  late final Timer _countdownTimer;
   Map<String, dynamic>? _prize;
   int _rewardRevealKey = 0;
   bool _opening = false;
@@ -69,14 +71,26 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
   void initState() {
     super.initState();
     _overview = widget.service.getDailySignInWheelOverview();
+    _overview.then<void>((data) {
+      if (!mounted || _prize != null) return;
+      final active = _activePrize(_rows(data['rewards']));
+      if (active != null) {
+        _boxController.value = 1;
+        setState(() => _prize = active);
+      }
+    }, onError: (Object error, StackTrace stackTrace) {});
     _boxController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1900),
+      duration: const Duration(milliseconds: 4000),
     );
+    _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _countdownTimer.cancel();
     _boxController.dispose();
     super.dispose();
   }
@@ -87,7 +101,14 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
       _overview = f;
     });
     try {
-      await f;
+      final data = await f;
+      if (mounted && _prize == null) {
+        final active = _activePrize(_rows(data['rewards']));
+        if (active != null) {
+          _boxController.value = 1;
+          setState(() => _prize = active);
+        }
+      }
     } catch (_) {}
   }
 
@@ -95,6 +116,7 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
     if (_busy) return;
     setState(() => _busy = true);
     _boxController.reset();
+    Map<String, dynamic>? revealedPrize;
     try {
       final r = await widget.service.spinDailySignInWheel(
         spinKey: const Uuid().v4(),
@@ -110,8 +132,8 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
 
       final reducedMotion = MediaQuery.disableAnimationsOf(context);
       _boxController.duration = reducedMotion
-          ? const Duration(milliseconds: 450)
-          : const Duration(milliseconds: 1900);
+          ? const Duration(milliseconds: 500)
+          : const Duration(milliseconds: 4000);
       setState(() => _opening = true);
       await _boxController.forward();
       if (!mounted) return;
@@ -123,6 +145,7 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
         _opening = false;
         _overview = Future.value(overview);
       });
+      revealedPrize = spin;
     } catch (e) {
       if (!mounted) return;
       setState(() => _opening = false);
@@ -130,6 +153,9 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
       await _reload();
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+    if (revealedPrize != null && mounted) {
+      await _showRewardDialog(revealedPrize);
     }
   }
 
@@ -210,14 +236,198 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
       ..showSnackBar(SnackBar(content: Text(text)));
   }
 
+  String _remainingText(dynamic value) {
+    final target = DateTime.tryParse('$value')?.toLocal();
+    if (target == null) return 'Time unavailable';
+    final remaining = target.difference(DateTime.now());
+    if (remaining.isNegative || remaining.inSeconds == 0) return 'Expired';
+    final days = remaining.inDays;
+    final hours = remaining.inHours % 24;
+    final minutes = remaining.inMinutes % 60;
+    if (days > 0) return '${days}d ${hours}h left';
+    if (remaining.inHours > 0) return '${remaining.inHours}h ${minutes}m left';
+    return '${remaining.inMinutes}m left';
+  }
+
+  Future<void> _replayLast() async {
+    final prize = _prize;
+    if (prize == null || _busy) return;
+    setState(() {
+      _busy = true;
+      _opening = true;
+    });
+    _boxController
+      ..reset()
+      ..duration = MediaQuery.disableAnimationsOf(context)
+          ? const Duration(milliseconds: 500)
+          : const Duration(milliseconds: 4000);
+    try {
+      await _boxController.forward();
+      if (!mounted) return;
+      setState(() {
+        _opening = false;
+        _rewardRevealKey++;
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (mounted) await _showRewardDialog(prize);
+  }
+
+  Future<void> _showRewardDialog(Map<String, dynamic> prize) async {
+    final code = '${prize['reward_code'] ?? prize['code'] ?? ''}';
+    final isContent = _isContentReward(code);
+    final selectable = _isSelectable(prize);
+    final count = _requiredCount(code);
+    final contentType = _kind(code) == 'movie'
+        ? (count == 1 ? 'Movie' : 'Movies')
+        : (count == 1 ? 'Episode' : 'Episodes');
+    final headline = isContent
+        ? 'FREE WATCH $count ${contentType.toUpperCase()}'
+        : (_rewardLabels[code] ?? 'Lucky Box reward');
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: .82),
+      builder: (dialogContext) => Dialog(
+        key: const ValueKey('daily-reward-dialog'),
+        backgroundColor: _panel,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: _gold.withValues(alpha: .65)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    color: _gold.withValues(alpha: .9),
+                    size: 16,
+                  ),
+                  const SizedBox(width: 7),
+                  const Expanded(
+                    child: Text(
+                      'DAILY REWARD UNLOCKED',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: _gold,
+                        fontSize: 9,
+                        letterSpacing: 1,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    color: _gold.withValues(alpha: .9),
+                    size: 16,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Icon(Icons.card_giftcard_rounded, color: _gold, size: 42),
+              const SizedBox(height: 12),
+              Text(
+                headline,
+                key: const ValueKey('daily-reward-dialog-title'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                isContent
+                    ? 'Choose your reward now or keep it for later.'
+                    : code == 'roll_again'
+                    ? 'Your next box is ready to open.'
+                    : 'Your daily YGNTV reward is ready.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: _muted),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  key: const ValueKey('daily-reward-primary-action'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFC5222A),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      if (selectable) {
+                        _select(prize);
+                      } else if (code == 'roll_again') {
+                        _spin();
+                      }
+                    });
+                  },
+                  child: Text(
+                    selectable
+                        ? 'Choose $contentType Now ›'
+                        : code == 'roll_again'
+                        ? 'Open Another Box ›'
+                        : 'Got it',
+                  ),
+                ),
+              ),
+              if (selectable)
+                TextButton(
+                  key: const ValueKey('daily-reward-keep-for-later'),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Keep for Later'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _ink,
       appBar: AppBar(
         backgroundColor: _ink,
-        title: const Text('Daily Sign In Bonus (Lucky Box)'),
+        toolbarHeight: 68,
+        title: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Daily Lucky Box',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+            Text(
+              'Yangon TV VIP Rewards',
+              style: TextStyle(color: _muted, fontSize: 10),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton.icon(
+            key: const ValueKey('daily-reward-replay'),
+            onPressed: _prize == null || _busy ? null : _replayLast,
+            icon: const Icon(Icons.replay_rounded, size: 18),
+            label: const Text('Replay'),
+          ),
+        ],
       ),
+      bottomNavigationBar: _stickyActionBar(_prize),
       body: FutureBuilder<Map<String, dynamic>>(
         future: _overview,
         builder: (context, snapshot) {
@@ -257,10 +467,60 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
                   Column(
                     children: [
                       const Text(
-                        'Open a box for a server-selected YGNTV reward.',
+                        'Your daily YGNTV surprise is waiting inside.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: _muted),
                       ),
+                      if (!canSpin &&
+                          prize != null &&
+                          code != 'roll_again') ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          key: const ValueKey('daily-reward-claimed-status'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF164B32),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: const Color(0xFF49C887)),
+                          ),
+                          child: const Text(
+                            "Today's Reward Claimed",
+                            style: TextStyle(
+                              color: Color(0xFF81E6AF),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (_opening)
+                        AnimatedBuilder(
+                          animation: _boxController,
+                          builder: (context, _) {
+                            final charging = _boxController.value >= .34;
+                            return SizedBox(
+                              key: const ValueKey('daily-box-phase-label'),
+                              height: 22,
+                              child: AnimatedOpacity(
+                                opacity: charging ? 1 : 0,
+                                duration: const Duration(milliseconds: 220),
+                                child: const Center(
+                                  child: Text(
+                                    'Charging golden cinema reward...',
+                                    style: TextStyle(
+                                      color: _gold,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                       const SizedBox(height: 16),
                       SizedBox(
                         width: 280,
@@ -356,39 +616,52 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
                           ],
                         ),
                       ),
-                      if (_opening) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Opening your Lucky Box…',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: _gold, fontSize: 12),
-                        ),
-                      ],
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton(
                           onPressed: canSpin && !_busy ? _spin : null,
                           style: FilledButton.styleFrom(
-                            backgroundColor: _gold,
+                            backgroundColor: const Color(0xFFF5A623),
                             foregroundColor: _ink,
                           ),
                           child: Text(
                             _busy
                                 ? _opening
-                                      ? 'Opening…'
+                                      ? 'Unlocking Mystery Box...'
                                       : 'Checking bonus…'
                                 : canSpin
-                                ? 'Open Lucky Box'
-                                : 'Next bonus: ${_date(data['next_spin_at'])}',
+                                ? 'Claim Lucky Box'
+                                : 'Next bonus in ${_remainingText(data['next_spin_at'])}',
                           ),
                         ),
                       ),
+                      if (_opening)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(99),
+                            child: AnimatedBuilder(
+                              animation: _boxController,
+                              builder: (context, _) => LinearProgressIndicator(
+                                key: const ValueKey(
+                                  'daily-box-opening-progress',
+                                ),
+                                value: _boxController.value,
+                                minHeight: 5,
+                                backgroundColor: const Color(0xFF39343B),
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                  _gold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       if (!canSpin)
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
-                            'A non-repeat result starts the 24-hour cooldown.',
+                            'Next box in ${_remainingText(data['next_spin_at'])}. Non-repeat rewards use a 24-hour cooldown.',
                             textAlign: TextAlign.center,
                             style: const TextStyle(color: _muted, fontSize: 12),
                           ),
@@ -460,7 +733,7 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
                           if (_isContentReward(code) &&
                               prize['expires_at'] != null)
                             Text(
-                              'Expires: ${_date(prize['expires_at'])}',
+                              'Expires in ${_remainingText(prize['expires_at'])}',
                               style: const TextStyle(color: _muted),
                             ),
                           if (_isContentReward(code))
@@ -500,7 +773,7 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Bonus history',
+                        'RECENT REWARDS',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 15,
@@ -515,8 +788,7 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text(
-                            _rewardLabels['${row['reward_code'] ?? row['code']}'] ??
-                                '${row['reward_label'] ?? 'Reward'}',
+                            '${_map(row['selection'])['title'] ?? _rewardLabels['${row['reward_code'] ?? row['code']}'] ?? row['reward_label'] ?? 'Reward'}',
                           ),
                           subtitle: Text(
                             'Selection: ${_selectionStatusLabel(row['selection_status'] ?? 'not_required')} · Expires ${_date(row['expires_at'])}',
@@ -553,6 +825,87 @@ class _DailySignInWheelScreenState extends State<DailySignInWheelScreen>
       }
     }
     return null;
+  }
+
+  Widget? _stickyActionBar(Map<String, dynamic>? prize) {
+    if (prize == null || !_isSelectable(prize)) return null;
+    final code = '${prize['reward_code'] ?? prize['code'] ?? ''}';
+    final count = _requiredCount(code);
+    final contentType = _kind(code) == 'movie'
+        ? (count == 1 ? 'Movie' : 'Movies')
+        : (count == 1 ? 'Episode' : 'Episodes');
+    return SafeArea(
+      top: false,
+      child: Container(
+        key: const ValueKey('daily-reward-sticky-action-bar'),
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+        decoration: BoxDecoration(
+          color: _panel,
+          border: Border(top: BorderSide(color: _gold.withValues(alpha: .3))),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'FREE WATCH $count ${contentType.toUpperCase()}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _gold,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Expires in ${_remainingText(prize['expires_at'])}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: _muted, fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '$count ${count == 1 ? 'PICK' : 'PICKS'} LEFT',
+                  key: const ValueKey('daily-reward-picks-left'),
+                  style: const TextStyle(
+                    color: _gold,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                FilledButton(
+                  key: const ValueKey('daily-reward-sticky-choose'),
+                  onPressed: _busy ? null : () => _select(prize),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFC5222A),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 38),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    textStyle: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  child: Text('Choose $count $contentType ›'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -848,19 +1201,43 @@ class _LuckyBoxPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final t = Curves.easeOutCubic.transform(progress.clamp(0.0, 1.0));
+    final p = progress.clamp(0.0, 1.0).toDouble();
+    final opening = ((p - .56) / .26).clamp(0.0, 1.0).toDouble();
+    final particles = ((p - .48) / .48).clamp(0.0, 1.0).toDouble();
+    final shakeEnvelope = (1 - ((p - .39).abs() / .17)).clamp(0.0, 1.0);
+    final shake = p > .22 && p < .56
+        ? math.sin(p * 94) * 4.2 * shakeEnvelope
+        : 0.0;
+
     canvas.save();
     canvas.scale(size.width / 280, size.height / 250);
-
-    _paintLight(canvas, t);
-    _paintBox(canvas, t);
-    _paintSparkles(canvas, t);
-
+    canvas.translate(shake, 0);
+    _paintLight(canvas, p);
+    _paintBox(canvas, opening);
+    _paintSparkles(canvas, particles);
+    _paintConfetti(canvas, particles);
     canvas.restore();
   }
 
   void _paintLight(Canvas canvas, double t) {
     if (t <= 0) return;
+    final haloBounds = Rect.fromCircle(
+      center: const Offset(140, 111),
+      radius: 132,
+    );
+    canvas.drawCircle(
+      const Offset(140, 111),
+      132,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFFFFC857).withValues(alpha: t * .34),
+            const Color(0xFFFFC857).withValues(alpha: t * .09),
+            const Color(0xFFFFC857).withValues(alpha: 0),
+          ],
+          stops: const [0, .45, 1],
+        ).createShader(haloBounds),
+    );
     final beamBounds = const Rect.fromLTWH(28, 0, 224, 126);
     final beamPath = Path()
       ..moveTo(140, 111)
@@ -1025,6 +1402,13 @@ class _LuckyBoxPainter extends CustomPainter {
       4,
       (i) => Offset.lerp(rightClosed[i], rightOpen[i], t)!,
     );
+    final lidAlpha = (1 - ((t - .46) / .4).clamp(0.0, 1.0)).toDouble();
+    canvas.save();
+    canvas.translate(0, -104 * t);
+    canvas.saveLayer(
+      const Rect.fromLTWH(0, 0, 280, 250),
+      Paint()..color = Colors.white.withValues(alpha: lidAlpha),
+    );
     _drawPolygon(
       canvas,
       leftFlap,
@@ -1047,6 +1431,8 @@ class _LuckyBoxPainter extends CustomPainter {
     );
     _drawPolygon(canvas, leftFlap, goldEdge);
     _drawPolygon(canvas, rightFlap, goldEdge);
+    canvas.restore();
+    canvas.restore();
 
     final bowAlpha = (1 - t) * .92;
     final bowPaint = Paint()
@@ -1098,6 +1484,37 @@ class _LuckyBoxPainter extends CustomPainter {
         path,
         Paint()..color = const Color(0xFFFFE7A4).withValues(alpha: t * shimmer),
       );
+    }
+  }
+
+  void _paintConfetti(Canvas canvas, double t) {
+    if (t <= .02) return;
+    const colors = [
+      Color(0xFFFFC857),
+      Color(0xFFE5454F),
+      Color(0xFFFFE7A4),
+      Color(0xFFFCFCFC),
+    ];
+    for (var i = 0; i < 28; i++) {
+      final x = 14 + ((i * 47) % 252).toDouble();
+      final fall = (t * (150 + (i % 5) * 17) + i * 19) % 230;
+      final drift = math.sin(t * 7 + i * 1.7) * (8 + (i % 4) * 3);
+      final fade = (1 - ((t - .76) / .24).clamp(0.0, .72)).toDouble();
+      canvas.save();
+      canvas.translate(x + drift, 12 + fall);
+      canvas.rotate(t * 5 + i * .83);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset.zero,
+            width: 4 + (i % 3).toDouble(),
+            height: 8 + (i % 4).toDouble(),
+          ),
+          const Radius.circular(1),
+        ),
+        Paint()..color = colors[i % colors.length].withValues(alpha: fade),
+      );
+      canvas.restore();
     }
   }
 

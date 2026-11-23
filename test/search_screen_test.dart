@@ -71,6 +71,15 @@ void main() {
     await tester.pumpWidget(_testApp(service, kind: 'movie'));
     await tester.pumpAndSettle();
 
+    final searchRect = tester.getRect(
+      find.byKey(const ValueKey('catalog-search-field')),
+    );
+    final genresRect = tester.getRect(
+      find.byKey(const ValueKey('catalog-genre-filters')),
+    );
+    expect(searchRect.bottom, lessThan(genresRect.top));
+    expect(genresRect.top - searchRect.bottom, lessThanOrEqualTo(20));
+    expect(find.text('Movies to discover'), findsNothing);
     expect(find.text('Alpha Action'), findsOneWidget);
     expect(find.text('Alpha Comedy'), findsNothing);
     expect(find.widgetWithText(ChoiceChip, 'Action'), findsOneWidget);
@@ -97,7 +106,8 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, 'Comedy'));
     await tester.pumpAndSettle();
 
-    expect(find.text('1 titles in “Comedy”'), findsOneWidget);
+    expect(find.textContaining('titles in'), findsNothing);
+    expect(find.text('Series to binge'), findsNothing);
     expect(find.text('Alpha Comedy'), findsOneWidget);
     expect(service.queries, isEmpty);
   });

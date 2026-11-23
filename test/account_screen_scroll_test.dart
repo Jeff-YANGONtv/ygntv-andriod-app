@@ -7,12 +7,20 @@ import 'package:ygntv_customer/screens/account_screen.dart';
 import 'package:ygntv_customer/screens/customer_home_screen.dart';
 
 class _CustomerUiService extends AuthService {
-  _CustomerUiService({TvProfileData? profile, this.blogPosts = const []})
-    : profile = profile ?? _defaultProfile(),
-      super(client: MockClient((_) async => http.Response('{}', 200)));
+  _CustomerUiService({
+    TvProfileData? profile,
+    this.blogPosts = const [],
+    this.watchHistory = const [],
+    this.watchHistoryPages = const {},
+    this.bonusHistory = const [],
+  }) : profile = profile ?? _defaultProfile(),
+       super(client: MockClient((_) async => http.Response('{}', 200)));
 
   final TvProfileData profile;
   final List<TvBlogPost> blogPosts;
+  final List<TvLibraryEntry> watchHistory;
+  final Map<int, List<TvLibraryEntry>> watchHistoryPages;
+  final List<Map<String, dynamic>> bonusHistory;
 
   @override
   Future<TvProfileData> getProfile() async => profile;
@@ -29,7 +37,7 @@ class _CustomerUiService extends AuthService {
 
   @override
   Future<List<TvLibraryEntry>> getWatchHistory({int page = 1}) async =>
-      const [];
+      watchHistoryPages[page] ?? watchHistory;
 
   @override
   Future<List<TvLibraryEntry>> getSavedContent({int page = 1}) async =>
@@ -55,7 +63,7 @@ class _CustomerUiService extends AuthService {
   Future<Map<String, dynamic>> getDailySignInWheelOverview() async => {
     'can_spin': false,
     'next_spin_at': '2026-11-16T00:00:00Z',
-    'rewards': <Map<String, dynamic>>[],
+    'rewards': bonusHistory,
   };
 }
 
@@ -100,58 +108,83 @@ Widget _home(_CustomerUiService service) => MaterialApp(
 );
 
 void main() {
-  testWidgets(
-    'bottom navigation is four icon-only tabs with three center shortcuts',
-    (tester) async {
-      final service = _CustomerUiService();
-      await tester.pumpWidget(_home(service));
-      await tester.pumpAndSettle();
+  testWidgets('bottom navigation uses the reference-style quick menu', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
 
-      final bottom = find.byKey(const ValueKey('customer-bottom-nav'));
-      expect(bottom, findsOneWidget);
-      final expectedIcons = {
-        'assets/navigation_icons/home_nav.png',
-        'assets/navigation_icons/movies_nav.png',
-        'assets/navigation_icons/series_nav.png',
-        'assets/navigation_icons/account_nav.png',
-      };
-      final images = find.descendant(of: bottom, matching: find.byType(Image));
-      expect(images, findsNWidgets(4));
+    final service = _CustomerUiService();
+    await tester.pumpWidget(_home(service));
+    await tester.pumpAndSettle();
+
+    final bottom = find.byKey(const ValueKey('customer-bottom-nav'));
+    expect(bottom, findsOneWidget);
+    expect(
+      find.descendant(of: bottom, matching: find.byType(Image)),
+      findsNothing,
+    );
+    for (final title in ['Home', 'Movies', 'Series', 'Account']) {
       expect(
-        images.evaluate().map((element) {
-          final image = tester.widget<Image>(
-            find.byElementPredicate(
-              (candidate) => identical(candidate, element),
-            ),
-          );
-          return (image.image as AssetImage).assetName;
-        }).toSet(),
-        expectedIcons,
+        find.descendant(of: bottom, matching: find.text(title)),
+        findsOneWidget,
       );
-      for (final title in ['Home', 'Movies', 'Series', 'Account']) {
-        expect(
-          find.descendant(of: bottom, matching: find.text(title)),
-          findsNothing,
-        );
-      }
-      expect(find.byKey(const ValueKey('customer-nav-blog')), findsNothing);
+    }
+    expect(
+      find.descendant(of: bottom, matching: find.text('Blog')),
+      findsNothing,
+    );
+    for (final destination in ['home', 'movie', 'series', 'account']) {
+      expect(find.byKey(ValueKey('customer-nav-$destination')), findsOneWidget);
+    }
+    expect(
+      find.byKey(const ValueKey('customer-nav-quick-actions')),
+      findsOneWidget,
+    );
 
-      await tester.tap(
-        find.byKey(const ValueKey('customer-nav-quick-actions')),
+    await tester.tap(find.byKey(const ValueKey('customer-nav-account')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('account-profile-card')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('customer-nav-quick-actions')));
+    await tester.pumpAndSettle();
+    for (final label in ['Subscription', 'Daily Bonus', 'Refer & Earn']) {
+      expect(find.text(label), findsOneWidget);
+      final labelText = tester.widget<Text>(find.text(label));
+      expect(labelText.style?.decoration, TextDecoration.none);
+      expect(labelText.style?.decorationColor, Colors.transparent);
+    }
+    for (final destination in ['subscription', 'daily-bonus', 'referral']) {
+      expect(
+        find.byKey(ValueKey('customer-quick-menu-$destination')),
+        findsOneWidget,
       );
-      await tester.pumpAndSettle();
-      for (final action in ['subscription', 'referral', 'daily-bonus']) {
-        expect(find.byKey(ValueKey('customer-nav-$action')), findsOneWidget);
-      }
-      expect(find.text('Premium Subscription'), findsNothing);
-      expect(find.text('Daily Sign In Bonus'), findsNothing);
+      expect(
+        tester
+            .widget<InkWell>(
+              find.byKey(ValueKey('customer-quick-menu-$destination')),
+            )
+            .onTap,
+        isNotNull,
+      );
+    }
+    expect(
+      find.byKey(const ValueKey('customer-nav-quick-actions-close')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('customer-quick-menu-subscription')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Premium Subscription'), findsWidgets);
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      service.dispose();
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    service.dispose();
+  });
 
-  testWidgets('Account contains only the five requested primary menu actions', (
+  testWidgets('Account shows requested actions and honest empty data states', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(360, 800);
@@ -187,7 +220,11 @@ void main() {
         reason: '$title should be available.',
       );
     }
-    expect(find.text('Screen Time'), findsNothing);
+    expect(find.text('Screen Time'), findsOneWidget);
+    expect(find.text('Usage data is unavailable.'), findsOneWidget);
+    expect(find.text('No recent watch activity yet.'), findsOneWidget);
+    expect(find.textContaining('Daily Lucky Box'), findsNothing);
+    expect(find.textContaining('Premium Plan Renewed'), findsNothing);
     expect(find.text('Movie Library'), findsNothing);
     expect(find.text('My Library'), findsNothing);
     expect(find.text('2 of 2 allowed devices signed in'), findsOneWidget);
@@ -197,14 +234,53 @@ void main() {
   });
 
   testWidgets(
-    'Activity History shows four requested tabs and no Movie Library',
+    'Account preview uses real watch history and profile screen time',
     (tester) async {
       tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      final service = _CustomerUiService();
+      final service = _CustomerUiService(
+        profile: TvProfileData(
+          name: 'Test Viewer',
+          email: 'viewer@example.com',
+          displayName: 'Test Viewer',
+          entitlement: const TvEntitlement(
+            active: false,
+            planKey: null,
+            planLabel: null,
+            validFrom: null,
+            validUntil: null,
+          ),
+          devices: const [],
+          screenTimeLast30DaysSeconds: 3660,
+        ),
+        watchHistory: const [
+          TvLibraryEntry(
+            contentType: 'movie',
+            contentId: 41,
+            title: 'Test Movie From History',
+            posterUrl: '',
+            year: '2026',
+            positionSeconds: 120,
+            durationSeconds: 7200,
+            completed: false,
+            lastWatchedAt: '2026-11-22T12:00:00Z',
+          ),
+          TvLibraryEntry(
+            contentType: 'episode',
+            contentId: 42,
+            title: 'Test Series Episode From History',
+            posterUrl: '',
+            year: '2026',
+            positionSeconds: 90,
+            durationSeconds: 2400,
+            completed: false,
+            lastWatchedAt: '2026-11-21T12:00:00Z',
+          ),
+        ],
+      );
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark(useMaterial3: true),
@@ -218,7 +294,67 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Activity History'));
+
+      expect(find.text('Test Movie From History'), findsOneWidget);
+      expect(find.text('Test Series Episode From History'), findsOneWidget);
+      expect(
+        tester
+            .widget<Icon>(
+              find.byKey(const ValueKey('recent-activity-icon-movie')),
+            )
+            .icon,
+        Icons.movie_outlined,
+      );
+      expect(
+        tester
+            .widget<Icon>(
+              find.byKey(const ValueKey('recent-activity-icon-episode')),
+            )
+            .icon,
+        Icons.live_tv_outlined,
+      );
+      expect(find.text('1 hr 1 min in the last 30 days'), findsOneWidget);
+      expect(find.text('Daily Lucky Box'), findsNothing);
+      expect(find.text('Premium Plan Renewed'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      service.dispose();
+    },
+  );
+
+  testWidgets(
+    'Activity History shows four requested tabs and no Movie Library',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final service = _CustomerUiService(
+        bonusHistory: const [
+          {
+            'id': 77,
+            'reward_code': 'one_movie',
+            'selection_status': 'selected',
+            'selection': {'title': 'Obsession'},
+            'claimed_at': '2026-11-22T12:00:00Z',
+          },
+        ],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(useMaterial3: true),
+          home: Scaffold(
+            body: AccountScreen(
+              service: service,
+              session: _session,
+              onSignOut: () async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('account-view-all-activity')));
       await tester.pumpAndSettle();
 
       expect(
@@ -228,6 +364,7 @@ void main() {
       for (final tab in ['Watch List', 'Watched', 'Downloaded']) {
         expect(find.text(tab), findsOneWidget);
       }
+      expect(find.text('Claimed Bonus'), findsOneWidget);
       final subscriptionTab = find.text('Subscription History');
       await tester.ensureVisible(subscriptionTab);
       expect(subscriptionTab, findsOneWidget);
@@ -236,6 +373,13 @@ void main() {
       await tester.tap(subscriptionTab);
       await tester.pumpAndSettle();
       expect(find.text('Subscription history is unavailable'), findsOneWidget);
+
+      final claimedBonusTab = find.text('Claimed Bonus');
+      await tester.ensureVisible(claimedBonusTab);
+      await tester.tap(claimedBonusTab);
+      await tester.pumpAndSettle();
+      expect(find.text('1 Movie'), findsOneWidget);
+      expect(find.text('Selected: Obsession'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       service.dispose();
@@ -302,6 +446,69 @@ void main() {
       service.dispose();
     },
   );
+
+  testWidgets('View All loads every available Watch History page', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _CustomerUiService(
+      watchHistoryPages: const {
+        1: [
+          TvLibraryEntry(
+            contentType: 'movie',
+            contentId: 51,
+            title: 'Newest History Item',
+            posterUrl: '',
+            year: '2026',
+            positionSeconds: 20,
+            durationSeconds: 600,
+            completed: false,
+            lastWatchedAt: '2026-11-22T12:00:00Z',
+          ),
+        ],
+        2: [
+          TvLibraryEntry(
+            contentType: 'episode',
+            contentId: 52,
+            title: 'Older History Item',
+            posterUrl: '',
+            year: '2025',
+            positionSeconds: 20,
+            durationSeconds: 600,
+            completed: false,
+            lastWatchedAt: '2026-11-20T12:00:00Z',
+          ),
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: Scaffold(
+          body: AccountScreen(
+            service: service,
+            session: _session,
+            onSignOut: () async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('account-view-all-activity')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Watched'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Newest History Item'), findsOneWidget);
+    expect(find.text('Older History Item'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    service.dispose();
+  });
 
   testWidgets('home keeps Blog as a swipeable slider, not a navigation tab', (
     tester,

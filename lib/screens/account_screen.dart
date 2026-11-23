@@ -27,21 +27,25 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   late Future<TvProfileData> _profile;
+  late Future<List<TvLibraryEntry>> _recentActivity;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     _profile = widget.service.getProfile();
+    _recentActivity = widget.service.getWatchHistory();
   }
 
   Future<void> _reload() async {
     final next = widget.service.getProfile();
+    final nextActivity = widget.service.getWatchHistory();
     setState(() {
       _profile = next;
+      _recentActivity = nextActivity;
     });
     try {
-      await next;
+      await Future.wait<Object?>([next, nextActivity]);
     } catch (_) {}
   }
 
@@ -118,12 +122,7 @@ class _AccountScreenState extends State<AccountScreen> {
         key: const PageStorageKey<String>('account-profile-scroll'),
         primary: false,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(
-          14,
-          7,
-          14,
-          28 + 67 + MediaQuery.of(context).viewPadding.bottom,
-        ),
+        padding: const EdgeInsets.fromLTRB(14, 7, 14, 16),
         children: [
           const Padding(
             padding: EdgeInsets.fromLTRB(2, 0, 2, 7),
@@ -161,23 +160,36 @@ class _AccountScreenState extends State<AccountScreen> {
               );
             },
           ),
-          const SizedBox(height: 10),
-          _AccountMenuGroup(
-            key: const ValueKey('account-menu-group-activity-history'),
-            title: 'ACTIVITY HISTORY',
-            children: [
-              _AccountMenuRow(
-                key: const ValueKey('account-menu-activity-history'),
-                iconName: 'screen_time',
-                title: 'Activity History',
-                subtitle:
-                    'Watch List, Watched, Downloaded and Subscription History.',
-                onTap: () =>
-                    _open(ActivityHistoryScreen(service: widget.service)),
-              ),
-            ],
+          const SizedBox(height: 8),
+          _RecentActivitySection(
+            future: _recentActivity,
+            onRetry: _reload,
+            onViewAll: () =>
+                _open(ActivityHistoryScreen(service: widget.service)),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          FutureBuilder<TvProfileData>(
+            future: _profile,
+            builder: (context, snapshot) => _AccountMenuGroup(
+              key: const ValueKey('account-menu-group-screen-time'),
+              title: 'SCREEN TIME',
+              children: [
+                _AccountMenuRow(
+                  key: const ValueKey('account-menu-screen-time'),
+                  iconName: 'screen_time',
+                  title: 'Screen Time',
+                  subtitle: snapshot.hasData
+                      ? _screenTimeLabel(
+                          snapshot.data!.screenTimeLast30DaysSeconds,
+                        )
+                      : snapshot.hasError
+                      ? 'Usage summary is unavailable.'
+                      : 'Loading usage summary…',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
           _AccountMenuGroup(
             key: const ValueKey('account-menu-group-support'),
             title: 'SUPPORT & CONTACT',
@@ -207,14 +219,14 @@ class _AccountScreenState extends State<AccountScreen> {
                   snapshot.connectionState == ConnectionState.waiting) {
                 return const _AccountMenuGroup(
                   key: ValueKey('account-menu-group-devices'),
-                  title: 'ACCOUNT ACTIVITY',
+                  title: 'LOGGED IN DEVICES',
                   children: [SizedBox(height: 54)],
                 );
               }
               if (!snapshot.hasData) {
                 return _AccountMenuGroup(
                   key: const ValueKey('account-menu-group-devices'),
-                  title: 'ACCOUNT ACTIVITY',
+                  title: 'LOGGED IN DEVICES',
                   children: [
                     _AccountMenuRow(
                       key: const ValueKey('account-menu-devices'),
@@ -230,7 +242,7 @@ class _AccountScreenState extends State<AccountScreen> {
               final devices = profile.devices;
               return _AccountMenuGroup(
                 key: const ValueKey('account-menu-group-devices'),
-                title: 'ACCOUNT ACTIVITY',
+                title: 'LOGGED IN DEVICES',
                 children: [
                   ExpansionTile(
                     key: const PageStorageKey<String>(
@@ -272,9 +284,9 @@ class _AccountScreenState extends State<AccountScreen> {
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 7,
                                   ),
-                                  leading: _Account3DIcon(
-                                    name: 'smartphone',
-                                    keyName: 'device-${device.id}',
+                                  leading: const Icon(
+                                    Icons.smartphone_rounded,
+                                    color: ygntvMuted,
                                     size: 18,
                                   ),
                                   title: Text(
@@ -315,18 +327,192 @@ class _AccountScreenState extends State<AccountScreen> {
               );
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
           _SignOutAction(onTap: () => widget.onSignOut()),
           const SizedBox(height: 9),
-          const Text(
-            'TEST BUILD · Private Android customer app · YGNTV.org',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF74717B), fontSize: 9),
-          ),
         ],
       ),
     ),
   );
+}
+
+class _RecentActivitySection extends StatelessWidget {
+  const _RecentActivitySection({
+    required this.future,
+    required this.onRetry,
+    required this.onViewAll,
+  });
+
+  final Future<List<TvLibraryEntry>> future;
+  final VoidCallback onRetry;
+  final VoidCallback onViewAll;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const ValueKey('account-recent-activity'),
+    padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+    decoration: BoxDecoration(
+      color: ygntvPanel,
+      borderRadius: BorderRadius.circular(15),
+      border: Border.all(color: ygntvGold.withValues(alpha: .13)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Activity History',
+                style: TextStyle(
+                  color: ygntvGold,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            TextButton(
+              key: const ValueKey('account-view-all-activity'),
+              onPressed: onViewAll,
+              style: TextButton.styleFrom(
+                minimumSize: Size.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                'View All',
+                style: TextStyle(
+                  color: ygntvRed,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        FutureBuilder<List<TvLibraryEntry>>(
+          future: future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 9),
+                child: Center(
+                  child: SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(
+                      color: ygntvRed,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                ),
+              );
+            }
+            if (snapshot.hasError) {
+              return Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Recent activity is unavailable.',
+                      style: TextStyle(color: ygntvMuted, fontSize: 10),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: onRetry,
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 5),
+                    ),
+                    icon: const Icon(Icons.refresh_rounded, size: 15),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              );
+            }
+            final entries = snapshot.data ?? const <TvLibraryEntry>[];
+            if (entries.isEmpty) {
+              return const Text(
+                'No recent watch activity yet.',
+                style: TextStyle(color: ygntvMuted, fontSize: 10),
+              );
+            }
+            return Column(
+              children: [
+                for (final entry in entries.take(3))
+                  _RecentWatchActivityRow(entry: entry),
+              ],
+            );
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+class _RecentWatchActivityRow extends StatelessWidget {
+  const _RecentWatchActivityRow({required this.entry});
+
+  final TvLibraryEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final watchedAt = DateTime.tryParse(entry.lastWatchedAt ?? '')?.toLocal();
+    final isEpisode = entry.contentType == 'episode';
+    final type = isEpisode ? 'Series episode' : 'Movie';
+    final icon = isEpisode ? Icons.live_tv_outlined : Icons.movie_outlined;
+    final iconColor = isEpisode ? ygntvRed : ygntvGold;
+    final subtitle = watchedAt == null
+        ? type
+        : '$type · ${_formatDate(watchedAt.toIso8601String())}';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFF24232A),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              icon,
+              key: ValueKey(
+                'recent-activity-icon-${isEpisode ? 'episode' : 'movie'}',
+              ),
+              color: iconColor,
+              size: 19,
+              semanticLabel: type,
+            ),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: ygntvMuted, fontSize: 9),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ProfileCard extends StatelessWidget {
@@ -499,8 +685,10 @@ class _ProfileCard extends StatelessWidget {
                             width: 28,
                             height: 24,
                           ),
-                          icon: const _Account3DIcon(
-                            name: 'copy_uid',
+                          icon: const Icon(
+                            Icons.content_copy_rounded,
+                            key: ValueKey('account-copy-uid-icon'),
+                            color: ygntvGold,
                             size: 15,
                           ),
                         ),
@@ -571,26 +759,6 @@ class _ProfileHeaderClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
-}
-
-class _Account3DIcon extends StatelessWidget {
-  const _Account3DIcon({required this.name, required this.size, this.keyName});
-
-  final String name;
-  final double size;
-  final String? keyName;
-
-  @override
-  Widget build(BuildContext context) => Image.asset(
-    'assets/account_icons/$name.png',
-    key: ValueKey('account-icon-${keyName ?? name}'),
-    width: size,
-    height: size,
-    fit: BoxFit.contain,
-    filterQuality: FilterQuality.medium,
-    excludeFromSemantics: true,
-    gaplessPlayback: true,
-  );
 }
 
 class _AccountSectionHeading extends StatelessWidget {
@@ -755,9 +923,22 @@ class _AccountMenuIcon extends StatelessWidget {
         color: (highlighted ? ygntvRed : ygntvGold).withValues(alpha: .28),
       ),
     ),
-    child: _Account3DIcon(name: name, size: 27),
+    child: Icon(
+      _accountMenuIconFor(name),
+      color: highlighted ? ygntvRed : ygntvGold,
+      size: 19,
+      key: ValueKey('account-menu-icon-$name'),
+    ),
   );
 }
+
+IconData _accountMenuIconFor(String name) => switch (name) {
+  'screen_time' => Icons.access_time_rounded,
+  'help' => Icons.support_agent_rounded,
+  'social' => Icons.public_rounded,
+  'devices' => Icons.devices_rounded,
+  _ => Icons.info_outline_rounded,
+};
 
 class _SignOutAction extends StatelessWidget {
   const _SignOutAction({required this.onTap});
@@ -831,6 +1012,18 @@ String _premiumRemainingLabel(TvEntitlement? entitlement) {
     return '$minutes ${minutes == 1 ? 'minute' : 'minutes'} left';
   }
   return 'Less than a minute left';
+}
+
+String _screenTimeLabel(int? seconds) {
+  if (seconds == null) return 'Usage data is unavailable.';
+  if (seconds <= 0) return '0 min in the last 30 days';
+  if (seconds < 60) return '$seconds sec in the last 30 days';
+  final minutes = seconds ~/ 60;
+  final hours = minutes ~/ 60;
+  final remainingMinutes = minutes % 60;
+  if (hours == 0) return '$minutes min in the last 30 days';
+  if (remainingMinutes == 0) return '$hours hr in the last 30 days';
+  return '$hours hr $remainingMinutes min in the last 30 days';
 }
 
 String _englishAccountError(Object error, String fallback) {

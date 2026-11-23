@@ -106,7 +106,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 return _MessageCard(
                   icon: Icons.wifi_off_rounded,
                   title: 'Search is unavailable',
-                  copy: snapshot.error.toString(),
+                  copy: 'Check your connection and try again.',
                   action: TextButton.icon(
                     onPressed: () => _search(_query),
                     icon: const Icon(Icons.refresh_rounded),
@@ -180,7 +180,7 @@ class _SearchPoster extends StatelessWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: FontWeight.w700,
             height: 1.2,
           ),
@@ -193,7 +193,7 @@ class _SearchPoster extends StatelessWidget {
           ].where((part) => part.isNotEmpty).join(' · '),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: ygntvMuted, fontSize: 8),
+          style: const TextStyle(color: ygntvMuted, fontSize: 9),
         ),
       ],
     ),

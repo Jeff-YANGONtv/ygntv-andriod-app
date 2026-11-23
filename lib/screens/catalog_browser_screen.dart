@@ -162,91 +162,55 @@ class _CatalogBrowserScreenState extends State<CatalogBrowserScreen> {
         SliverPersistentHeader(
           pinned: true,
           delegate: _CatalogPinnedHeaderDelegate(
-            extent: 112,
+            extent: 68,
             child: Material(
               color: const Color(0xFF09090D),
-              child: Column(
-                children: [
-                  SizedBox(
-                    height: 50,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 18),
-                      child: Row(
-                        children: [
-                          Text(
-                            widget.title,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
+              child: SizedBox(
+                height: 68,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 2, 18, 4),
+                  child: TextField(
+                    key: const ValueKey('catalog-search-field'),
+                    controller: _queryController,
+                    textInputAction: TextInputAction.search,
+                    onChanged: _onQueryChanged,
+                    onSubmitted: _search,
+                    decoration: InputDecoration(
+                      hintText: widget.kind == 'movie'
+                          ? 'Search Movie'
+                          : 'Search Series',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: _query.isEmpty
+                          ? const Icon(Icons.manage_search_rounded)
+                          : IconButton(
+                              tooltip: 'Clear search',
+                              onPressed: () {
+                                _queryController.clear();
+                                _onQueryChanged('');
+                              },
+                              icon: const Icon(Icons.close_rounded),
                             ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            tooltip: 'Refresh catalog',
-                            onPressed: widget.onRefresh,
-                            icon: const Icon(Icons.refresh_rounded),
-                          ),
-                        ],
+                      filled: true,
+                      fillColor: const Color(0xFF19191F),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide.none,
                       ),
                     ),
                   ),
-                  SizedBox(
-                    height: 62,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 2, 18, 4),
-                      child: TextField(
-                        controller: _queryController,
-                        textInputAction: TextInputAction.search,
-                        onChanged: _onQueryChanged,
-                        onSubmitted: _search,
-                        decoration: InputDecoration(
-                          hintText: widget.kind == 'movie'
-                              ? 'Search Movie'
-                              : 'Search Series',
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: _query.isEmpty
-                              ? const Icon(Icons.manage_search_rounded)
-                              : IconButton(
-                                  tooltip: 'Clear search',
-                                  onPressed: () {
-                                    _queryController.clear();
-                                    _onQueryChanged('');
-                                  },
-                                  icon: const Icon(Icons.close_rounded),
-                                ),
-                          filled: true,
-                          fillColor: const Color(0xFF19191F),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(15),
-                            borderSide: BorderSide.none,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
         ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
+            padding: const EdgeInsets.fromLTRB(18, 6, 18, 28),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  key: const ValueKey('catalog-page-title'),
-                  widget.title,
-                  style: const TextStyle(
-                    fontSize: 25,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -.6,
-                  ),
-                ),
-                const SizedBox(height: 13),
                 _genreFilters(),
-                const SizedBox(height: 13),
+                const SizedBox(height: 10),
                 _catalogResults(),
               ],
             ),
@@ -257,6 +221,7 @@ class _CatalogBrowserScreenState extends State<CatalogBrowserScreen> {
   );
 
   Widget _genreFilters() => SizedBox(
+    key: const ValueKey('catalog-genre-filters'),
     height: 37,
     child: FutureBuilder<List<CatalogItem>>(
       future: _catalog,
@@ -334,20 +299,12 @@ class _CatalogBrowserScreenState extends State<CatalogBrowserScreen> {
         );
       }
 
-      final countLabel = _query.runes.length >= 2
-          ? '${items.length} ${widget.kind == 'movie' ? 'movies' : 'series'} found'
-          : _selectedGenre == null
-          ? '${items.length} ${widget.kind == 'movie' ? 'movies' : 'series'}'
-          : '${items.length} titles in “$_selectedGenre”';
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            countLabel,
-            style: const TextStyle(color: Color(0xFFAAA7B0), fontSize: 11),
-          ),
-          const SizedBox(height: 11),
+          const SizedBox(height: 8),
           GridView.builder(
+            key: const ValueKey('catalog-result-grid'),
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: items.length,
@@ -429,7 +386,7 @@ class _CatalogPoster extends StatelessWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: FontWeight.w700,
             height: 1.2,
           ),
@@ -442,7 +399,7 @@ class _CatalogPoster extends StatelessWidget {
           ].where((part) => part.isNotEmpty).join(' · '),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: Color(0xFFAAA7B0), fontSize: 8),
+          style: const TextStyle(color: Color(0xFFAAA7B0), fontSize: 9),
         ),
       ],
     ),

@@ -110,6 +110,13 @@ Future<_HomeHarness> _mountHome(
   return _HomeHarness(service: service, event: event);
 }
 
+void _expectCatalogTab(WidgetTester tester, String expectedHint) {
+  final search = find.byKey(const ValueKey('catalog-search-field'));
+  expect(search, findsOneWidget);
+  expect(tester.widget<TextField>(search).decoration?.hintText, expectedHint);
+  expect(find.byKey(const ValueKey('catalog-page-title')), findsNothing);
+}
+
 void main() {
   testWidgets('movies catalogue link selects the Movies tab', (tester) async {
     final home = await _mountHome(tester);
@@ -118,12 +125,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('catalog-page-title')))
-          .data,
-      'Movie',
-    );
+    _expectCatalogTab(tester, 'Search Movie');
   });
 
   testWidgets('series catalogue link selects the Series tab', (tester) async {
@@ -133,12 +135,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('catalog-page-title')))
-          .data,
-      'Series',
-    );
+    _expectCatalogTab(tester, 'Search Series');
   });
 
   testWidgets('Blog deep link without a slug falls back to Home', (
@@ -244,12 +241,7 @@ void main() {
     await tester.tap(find.text('Featured TEST banner'));
     await tester.pumpAndSettle();
 
-    expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('catalog-page-title')))
-          .data,
-      'Movie',
-    );
+    _expectCatalogTab(tester, 'Search Movie');
     expect(home.service.lastLoadedKind, isNull);
   });
 

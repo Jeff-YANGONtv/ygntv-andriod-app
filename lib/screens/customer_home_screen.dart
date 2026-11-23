@@ -8,6 +8,7 @@ import '../deep_links/app_deep_link.dart';
 import '../services/customer_app_update_service.dart';
 import '../widgets/app_page_link_button.dart';
 import '../widgets/resilient_network_image.dart';
+import '../widgets/ygntv_home_banner_fallback.dart';
 import '../widgets/ygntv_brand.dart';
 import 'account_screen.dart';
 import 'blog_screen.dart';
@@ -43,7 +44,7 @@ class CustomerHomeScreen extends StatefulWidget {
 class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     with WidgetsBindingObserver {
   int _selectedTab = 0;
-  bool _quickActionsExpanded = false;
+  bool _quickMenuOpen = false;
   late Future<List<CatalogItem>> _movies;
   late Future<List<CatalogItem>> _series;
   late Future<List<TvLibraryEntry>> _continueWatching;
@@ -153,7 +154,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       if (!mounted) return;
       if (release == null) {
         if (manual) {
-          _showAppUpdateMessage('You are using the latest YGNTV TEST build.');
+          _showAppUpdateMessage(
+            'No new YGNTV updates are available for this app.',
+          );
         }
         return;
       }
@@ -425,12 +428,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
   void _selectTab(int tab) {
     setState(() {
       _selectedTab = tab;
-      _quickActionsExpanded = false;
     });
   }
 
   void _openShortcut(Widget page) {
-    setState(() => _quickActionsExpanded = false);
     Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => page));
   }
 
@@ -581,14 +582,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     }
   }
 
-  void _openLibrary() {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => LibraryScreen(service: widget.authService),
-      ),
-    );
-  }
-
   Future<void> _openNotifications() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -600,68 +593,47 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: ygntvBackground,
-    appBar: AppBar(
-      key: const ValueKey('customer-app-sticky-header'),
-      automaticallyImplyLeading: false,
-      titleSpacing: 16,
-      toolbarHeight: 62,
-      surfaceTintColor: Colors.transparent,
-      title: const YgntvBrandLockup(compact: true),
-      actions: [
-        AppPageLinkButton(uri: AppDeepLink.linkFor('home')),
-        IconButton(
-          tooltip: 'My Library',
-          onPressed: _openLibrary,
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-          icon: const Icon(Icons.video_library_outlined, color: ygntvGold),
-        ),
-        IconButton(
-          tooltip: 'Updates',
-          onPressed: _openNotifications,
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-          icon: Badge(
-            isLabelVisible: (_notificationFeed?.visibleUnreadCount ?? 0) > 0,
-            label: Text(
-              (_notificationFeed?.visibleUnreadCount ?? 0) > 99
-                  ? '99+'
-                  : '${_notificationFeed?.visibleUnreadCount ?? 0}',
-            ),
-            child: const Icon(
-              Icons.notifications_none_rounded,
-              color: ygntvGold,
-            ),
-          ),
-        ),
-        IconButton(
-          tooltip: 'Account',
-          onPressed: () => _selectTab(3),
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 42, height: 42),
-          icon: CircleAvatar(
-            radius: 15,
-            backgroundColor: ygntvRed.withValues(alpha: .18),
-            child: Text(
-              _initial(widget.session.name),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 11,
+  Widget build(BuildContext context) => Stack(
+    children: [
+      Scaffold(
+        backgroundColor: ygntvBackground,
+        appBar: AppBar(
+          key: const ValueKey('customer-app-sticky-header'),
+          automaticallyImplyLeading: false,
+          titleSpacing: 16,
+          toolbarHeight: 62,
+          surfaceTintColor: Colors.transparent,
+          title: const YgntvBrandLockup(compact: true),
+          actions: [
+            AppPageLinkButton(uri: AppDeepLink.linkFor('home')),
+            IconButton(
+              tooltip: 'Updates',
+              onPressed: _openNotifications,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+              icon: Badge(
+                isLabelVisible:
+                    (_notificationFeed?.visibleUnreadCount ?? 0) > 0,
+                label: Text(
+                  (_notificationFeed?.visibleUnreadCount ?? 0) > 99
+                      ? '99+'
+                      : '${_notificationFeed?.visibleUnreadCount ?? 0}',
+                ),
+                child: const Icon(
+                  Icons.notifications_none_rounded,
+                  color: ygntvGold,
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 4),
+          ],
         ),
-        const SizedBox(width: 4),
-      ],
-    ),
-    body: SafeArea(top: false, child: _selectedView()),
-    bottomNavigationBar: _buildBottomNavigationBar(),
+        body: SafeArea(top: false, child: _selectedView()),
+        bottomNavigationBar: _buildBottomNavigationBar(),
+      ),
+      if (_quickMenuOpen) _buildQuickMenuOverlay(context),
+    ],
   );
 
   Widget _selectedView() => switch (_selectedTab) {
@@ -693,137 +665,67 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
   Widget _buildBottomNavigationBar() => SafeArea(
     top: false,
     child: SizedBox(
-      height: _quickActionsExpanded ? 144 : 72,
+      height: 72,
       child: Stack(
+        key: const ValueKey('customer-bottom-nav'),
+        clipBehavior: Clip.none,
         children: [
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 72,
+          Positioned.fill(
             child: Container(
-              key: const ValueKey('customer-bottom-nav'),
-              decoration: BoxDecoration(
-                color: const Color(0xFF111116),
+              decoration: const BoxDecoration(
+                color: Color(0xFF111116),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
                 border: Border(
-                  top: BorderSide(color: ygntvRed.withValues(alpha: .28)),
+                  top: BorderSide(color: Color(0x22FFFFFF), width: 1),
                 ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x44000000),
-                    blurRadius: 12,
-                    offset: Offset(0, -4),
-                  ),
-                ],
               ),
               child: Row(
                 children: [
                   Expanded(
                     child: _bottomNavItem(
                       title: 'Home',
-                      asset: 'assets/navigation_icons/home_nav.png',
-                      tab: 0,
+                      keyName: 'home',
+                      icon: Icons.home_outlined,
+                      destination: 0,
                     ),
                   ),
                   Expanded(
                     child: _bottomNavItem(
                       title: 'Movies',
-                      asset: 'assets/navigation_icons/movies_nav.png',
-                      tab: 1,
+                      keyName: 'movie',
+                      icon: Icons.local_movies_outlined,
+                      destination: 1,
                     ),
                   ),
-                  const SizedBox(width: 58),
+                  const SizedBox(width: 66),
                   Expanded(
                     child: _bottomNavItem(
                       title: 'Series',
-                      asset: 'assets/navigation_icons/series_nav.png',
-                      tab: 2,
+                      keyName: 'series',
+                      icon: Icons.tv_outlined,
+                      destination: 2,
                     ),
                   ),
                   Expanded(
                     child: _bottomNavItem(
                       title: 'Account',
-                      asset: 'assets/navigation_icons/account_nav.png',
-                      tab: 3,
+                      keyName: 'account',
+                      icon: Icons.person_outline_rounded,
+                      destination: 3,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-          if (_quickActionsExpanded)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 72,
-              height: 62,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _quickAction(
-                    title: 'Premium Subscription',
-                    asset: 'assets/account_icons/subscription.png',
-                    keyName: 'subscription',
-                    page: SubscriptionScreen(service: widget.authService),
-                  ),
-                  _quickAction(
-                    title: 'Referral',
-                    asset: 'assets/account_icons/referral.png',
-                    keyName: 'referral',
-                    page: ReferralWalletScreen(service: widget.authService),
-                  ),
-                  _quickAction(
-                    title: 'Daily Sign In Bonus',
-                    asset: 'assets/account_icons/daily_bonus.png',
-                    keyName: 'daily-bonus',
-                    page: DailySignInWheelScreen(service: widget.authService),
-                  ),
-                ],
-              ),
-            ),
           Positioned(
             left: 0,
             right: 0,
-            bottom: 10,
+            top: -18,
             child: Center(
-              child: Tooltip(
-                message: _quickActionsExpanded
-                    ? 'Close quick actions'
-                    : 'More actions',
-                child: Semantics(
-                  label: _quickActionsExpanded
-                      ? 'Close quick actions'
-                      : 'More actions',
-                  button: true,
-                  child: Material(
-                    color: ygntvRed,
-                    elevation: 8,
-                    shadowColor: ygntvRed.withValues(alpha: .48),
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      key: const ValueKey('customer-nav-quick-actions'),
-                      customBorder: const CircleBorder(),
-                      onTap: () => setState(
-                        () => _quickActionsExpanded = !_quickActionsExpanded,
-                      ),
-                      child: SizedBox(
-                        width: 52,
-                        height: 52,
-                        child: Center(
-                          child: AnimatedRotation(
-                            turns: _quickActionsExpanded ? .125 : 0,
-                            duration: const Duration(milliseconds: 220),
-                            child: const Icon(
-                              Icons.add_rounded,
-                              color: Colors.white,
-                              size: 31,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              child: _quickMenuToggle(
+                open: false,
+                keyName: 'customer-nav-quick-actions',
               ),
             ),
           ),
@@ -834,10 +736,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
 
   Widget _bottomNavItem({
     required String title,
-    required String asset,
-    required int tab,
+    required String keyName,
+    required IconData icon,
+    required int destination,
   }) {
-    final selected = _selectedTab == tab;
+    final selected = _selectedTab == destination;
+    final color = selected ? ygntvRed : const Color(0xFF9697A1);
     return Tooltip(
       message: title,
       child: Semantics(
@@ -845,34 +749,27 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
         button: true,
         selected: selected,
         child: InkWell(
-          key: ValueKey('customer-nav-${title.toLowerCase()}'),
-          onTap: () => _selectTab(tab),
-          borderRadius: BorderRadius.circular(18),
+          key: ValueKey('customer-nav-$keyName'),
+          onTap: () => _selectTab(destination),
+          borderRadius: BorderRadius.circular(16),
           child: SizedBox(
             height: 72,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedScale(
-                  scale: selected ? 1.08 : 1,
-                  duration: const Duration(milliseconds: 180),
-                  child: Image.asset(
-                    asset,
-                    width: 38,
-                    height: 38,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.medium,
-                    excludeFromSemantics: true,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: selected ? 5 : 3,
-                  height: selected ? 5 : 3,
-                  decoration: BoxDecoration(
-                    color: selected ? ygntvGold : Colors.transparent,
-                    shape: BoxShape.circle,
+                Icon(icon, size: 22, color: color),
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    height: 1,
+                    letterSpacing: .1,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                   ),
                 ),
               ],
@@ -883,32 +780,205 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     );
   }
 
-  Widget _quickAction({
-    required String title,
-    required String asset,
-    required String keyName,
-    required Widget page,
-  }) => SizedBox(
-    width: 76,
-    height: 62,
-    child: Tooltip(
-      message: title,
-      child: Semantics(
-        label: title,
-        button: true,
-        child: InkWell(
-          key: ValueKey('customer-nav-$keyName'),
-          onTap: () => _openShortcut(page),
-          customBorder: const CircleBorder(),
-          child: Center(
-            child: Image.asset(
-              asset,
-              width: 42,
-              height: 42,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.medium,
-              excludeFromSemantics: true,
+  Widget _buildQuickMenuOverlay(BuildContext context) {
+    final safeBottom = MediaQuery.of(context).padding.bottom;
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              key: const ValueKey('customer-quick-menu-backdrop'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => _quickMenuOpen = false),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                builder: (context, opacity, _) => ColoredBox(
+                  color: Colors.black.withValues(alpha: .58 * opacity),
+                ),
+              ),
             ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: safeBottom + 72,
+            height: 144,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  left: 0,
+                  bottom: 0,
+                  child: _quickMenuAction(
+                    keyName: 'subscription',
+                    label: 'Subscription',
+                    accessibilityLabel: 'Premium Subscription',
+                    icon: Icons.workspace_premium_outlined,
+                    onTap: () {
+                      setState(() => _quickMenuOpen = false);
+                      _openShortcut(
+                        SubscriptionScreen(service: widget.authService),
+                      );
+                    },
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  child: Center(
+                    child: _quickMenuAction(
+                      keyName: 'daily-bonus',
+                      label: 'Daily Bonus',
+                      accessibilityLabel: 'Daily Sign In Bonus',
+                      icon: Icons.card_giftcard_outlined,
+                      onTap: () {
+                        setState(() => _quickMenuOpen = false);
+                        _openShortcut(
+                          DailySignInWheelScreen(service: widget.authService),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: _quickMenuAction(
+                    keyName: 'referral',
+                    label: 'Refer & Earn',
+                    accessibilityLabel: 'Referral',
+                    icon: Icons.person_add_alt_1_outlined,
+                    onTap: () {
+                      setState(() => _quickMenuOpen = false);
+                      _openShortcut(
+                        ReferralWalletScreen(service: widget.authService),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: safeBottom + 36,
+            child: Center(
+              child: _quickMenuToggle(
+                open: true,
+                keyName: 'customer-nav-quick-actions-close',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _quickMenuToggle({required bool open, required String keyName}) =>
+      Semantics(
+        label: open ? 'Close quick menu' : 'Open quick menu',
+        button: true,
+        child: Material(
+          color: ygntvRed,
+          shape: const CircleBorder(),
+          elevation: 6,
+          shadowColor: Colors.black.withValues(alpha: .3),
+          child: InkWell(
+            key: ValueKey(keyName),
+            customBorder: const CircleBorder(),
+            onTap: () => setState(() => _quickMenuOpen = !_quickMenuOpen),
+            child: SizedBox(
+              width: 58,
+              height: 58,
+              child: Center(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  child: Icon(
+                    open ? Icons.close_rounded : Icons.add_rounded,
+                    key: ValueKey(open),
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _quickMenuAction({
+    required String keyName,
+    required String label,
+    required String accessibilityLabel,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: .82, end: 1),
+    duration: const Duration(milliseconds: 220),
+    curve: Curves.easeOutCubic,
+    builder: (context, scale, child) =>
+        Transform.scale(scale: scale, child: child),
+    child: Tooltip(
+      message: accessibilityLabel,
+      child: Semantics(
+        label: accessibilityLabel,
+        button: true,
+        child: SizedBox(
+          width: 110,
+          height: 92,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Material(
+                color: const Color(0xFF17171C),
+                shape: CircleBorder(
+                  side: BorderSide(
+                    color: ygntvRed.withValues(alpha: .42),
+                    width: 1,
+                  ),
+                ),
+                child: InkWell(
+                  key: ValueKey('customer-quick-menu-$keyName'),
+                  customBorder: const CircleBorder(),
+                  onTap: onTap,
+                  child: SizedBox(
+                    width: 54,
+                    height: 54,
+                    child: Icon(icon, color: ygntvRed, size: 25),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF15151A),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: .08),
+                  ),
+                ),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    inherit: false,
+                    fontFamily: 'Roboto',
+                    color: Colors.white,
+                    fontSize: 11,
+                    height: 1,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.none,
+                    decorationColor: Colors.transparent,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -992,7 +1062,22 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     future: _topAdBanners,
     builder: (context, snapshot) {
       final banners = snapshot.data ?? const <TvHomeBanner>[];
-      if (banners.isEmpty) return const SizedBox.shrink();
+      if (banners.isEmpty) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const _HomeServiceState(
+            message: 'Loading featured banners…',
+            loading: true,
+          );
+        }
+        if (snapshot.hasError) {
+          return _HomeServiceState(
+            message: 'Featured banners are temporarily unavailable.',
+            onRetry: () => unawaited(_refresh()),
+          );
+        }
+        return const SizedBox.shrink();
+      }
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: AspectRatio(
@@ -1049,7 +1134,22 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
     future: _homeBlogPosts,
     builder: (context, snapshot) {
       final posts = snapshot.data ?? const <TvBlogPost>[];
-      if (posts.isEmpty) return const SizedBox.shrink();
+      if (posts.isEmpty) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return const _HomeServiceState(
+            message: 'Loading YGNTV updates…',
+            loading: true,
+          );
+        }
+        if (snapshot.hasError) {
+          return _HomeServiceState(
+            message: 'YGNTV updates are temporarily unavailable.',
+            onRetry: () => unawaited(_refresh()),
+          );
+        }
+        return const SizedBox.shrink();
+      }
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
         child: ClipRRect(
@@ -1183,16 +1283,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       url: banner.imageUrl,
       fit: BoxFit.contain,
       cacheWidth: 1456,
-      fallback: ColoredBox(
-        color: ygntvPanel,
-        child: Center(
-          child: Text(
-            banner.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-          ),
-        ),
+      fallback: YgntvHomeBannerFallback(
+        title: banner.name,
+        actionLabel: banner.buttonName,
       ),
     ),
   );
@@ -1232,6 +1325,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
       future: _continueWatching,
       builder: (context, snapshot) {
         final entries = snapshot.data ?? const <TvLibraryEntry>[];
+        if (entries.isEmpty && snapshot.hasError) {
+          return _HomeServiceState(
+            message: 'Continue watching is temporarily unavailable.',
+            onRetry: () => unawaited(_refresh()),
+          );
+        }
         if (entries.isEmpty &&
             snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox.shrink();
@@ -1242,7 +1341,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _SectionTitle(title: 'Continue watching', onSeeAll: _openLibrary),
+            const _SectionTitle(title: 'Continue watching'),
             const SizedBox(height: 11),
             SizedBox(
               height: 150,
@@ -1322,6 +1421,18 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
                   style: const TextStyle(color: ygntvMuted, fontSize: 11),
                 ),
               ),
+              if (snapshot.hasError)
+                Padding(
+                  padding: const EdgeInsets.only(left: 12, top: 2),
+                  child: TextButton.icon(
+                    onPressed: () => unawaited(_refresh()),
+                    icon: const Icon(Icons.refresh_rounded, size: 17),
+                    label: const Text('Try again'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
             ],
           );
         }
@@ -1351,10 +1462,68 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen>
   );
 }
 
+class _HomeServiceState extends StatelessWidget {
+  const _HomeServiceState({
+    required this.message,
+    this.loading = false,
+    this.onRetry,
+  });
+
+  final String message;
+  final bool loading;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: BoxDecoration(
+      color: ygntvPanel,
+      borderRadius: BorderRadius.circular(13),
+      border: Border.all(color: Colors.white.withValues(alpha: .07)),
+    ),
+    child: Row(
+      children: [
+        if (loading)
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(color: ygntvRed, strokeWidth: 2),
+          )
+        else
+          const Icon(Icons.wifi_off_rounded, color: ygntvGold, size: 18),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(
+            message,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: ygntvMuted,
+              fontSize: 11,
+              height: 1.2,
+            ),
+          ),
+        ),
+        if (onRetry != null)
+          TextButton.icon(
+            onPressed: onRetry,
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+            ),
+            icon: const Icon(Icons.refresh_rounded, size: 15),
+            label: const Text('Retry'),
+          ),
+      ],
+    ),
+  );
+}
+
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, required this.onSeeAll});
+  const _SectionTitle({required this.title, this.onSeeAll});
   final String title;
-  final VoidCallback onSeeAll;
+  final VoidCallback? onSeeAll;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 19),
@@ -1366,11 +1535,12 @@ class _SectionTitle extends StatelessWidget {
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
           ),
         ),
-        TextButton(
-          onPressed: onSeeAll,
-          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-          child: const Text('See all', style: TextStyle(fontSize: 10)),
-        ),
+        if (onSeeAll != null)
+          TextButton(
+            onPressed: onSeeAll,
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            child: const Text('See all', style: TextStyle(fontSize: 11)),
+          ),
       ],
     ),
   );
@@ -1412,7 +1582,7 @@ class _PosterCard extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 11,
               height: 1.18,
               fontWeight: FontWeight.w700,
             ),
@@ -1425,7 +1595,7 @@ class _PosterCard extends StatelessWidget {
             ].where((part) => part.isNotEmpty).join(' · '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: ygntvMuted, fontSize: 8),
+            style: const TextStyle(color: ygntvMuted, fontSize: 9),
           ),
         ],
       ),
@@ -1605,11 +1775,6 @@ class _FeatureBackdrop extends StatelessWidget {
       ),
     ),
   );
-}
-
-String _initial(String name) {
-  final trimmed = name.trim();
-  return trimmed.isEmpty ? 'Y' : trimmed.characters.first.toUpperCase();
 }
 
 String _marqueeSignature(Iterable<TvHomeMarqueeEntry> entries) => entries

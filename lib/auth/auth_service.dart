@@ -407,7 +407,7 @@ class TvProfileData {
     required this.displayName,
     required this.entitlement,
     required this.devices,
-    this.screenTimeLast30DaysSeconds = 0,
+    this.screenTimeLast30DaysSeconds,
     this.deviceLimit = 2,
   });
 
@@ -416,7 +416,7 @@ class TvProfileData {
   final String displayName;
   final TvEntitlement entitlement;
   final List<TvDevice> devices;
-  final int screenTimeLast30DaysSeconds;
+  final int? screenTimeLast30DaysSeconds;
   final int deviceLimit;
 
   factory TvProfileData.fromJson(Map<String, dynamic> json) {
@@ -432,8 +432,9 @@ class TvProfileData {
         'display_name',
       ], fallback: _firstString(user, ['name'], fallback: 'Yangon TV viewer')),
       entitlement: TvEntitlement.fromJson(entitlement),
-      screenTimeLast30DaysSeconds:
-          _intValue(screenTime['last_30_days_seconds']) ?? 0,
+      screenTimeLast30DaysSeconds: _intValue(
+        screenTime['last_30_days_seconds'],
+      ),
       deviceLimit: (_intValue(json['device_limit']) ?? 2).clamp(1, 2).toInt(),
       devices: devicesValue is List
           ? devicesValue
@@ -625,6 +626,13 @@ class TvSocialLink {
   }
 }
 
+enum CustomerNotificationCategory {
+  purchaseCompleted,
+  subscriptionExpired,
+  downloadStatus,
+  newBlogPost,
+}
+
 class TvNotificationEntry {
   const TvNotificationEntry({
     required this.id,
@@ -648,80 +656,60 @@ class TvNotificationEntry {
 
   bool get isRead => readAt != null && readAt!.isNotEmpty;
 
-  bool get isCustomerVisible {
+  CustomerNotificationCategory? get customerCategory {
     final normalizedType = (type ?? '').toLowerCase().replaceAll(
       RegExp(r'[^a-z0-9]'),
       '',
     );
     if (normalizedType.isNotEmpty) {
-      if (_customerVisibleTypes.contains(normalizedType)) return true;
+      if (normalizedType == 'blogpost' ||
+          ((normalizedType.contains('blog') &&
+                  normalizedType.contains('post')) &&
+              (normalizedType.contains('new') ||
+                  normalizedType.contains('published') ||
+                  normalizedType.contains('created')))) {
+        return CustomerNotificationCategory.newBlogPost;
+      }
       if ((normalizedType.contains('premium') ||
               normalizedType.contains('subscription')) &&
           normalizedType.contains('expired')) {
-        return true;
+        return CustomerNotificationCategory.subscriptionExpired;
       }
       if ((normalizedType.contains('payment') ||
               normalizedType.contains('purchas')) &&
           _approvedPaymentStates.any(normalizedType.endsWith)) {
-        return true;
+        return CustomerNotificationCategory.purchaseCompleted;
       }
-      return normalizedType.contains('download') &&
-          _downloadStatusStates.any(normalizedType.endsWith);
+      if (normalizedType.contains('download') &&
+          _downloadStatusStates.any(normalizedType.endsWith)) {
+        return CustomerNotificationCategory.downloadStatus;
+      }
+      return null;
     }
 
     final text = '$title $message'.toLowerCase();
     if (text.contains('blog') &&
         text.contains('post') &&
         (text.contains('new') || text.contains('published'))) {
-      return true;
+      return CustomerNotificationCategory.newBlogPost;
     }
     if ((text.contains('premium') || text.contains('subscription')) &&
         text.contains('expired')) {
-      return true;
+      return CustomerNotificationCategory.subscriptionExpired;
     }
     final isApprovedPayment =
         (text.contains('payment') || text.contains('purchase')) &&
         _approvedPaymentStates.any(text.contains);
-    if (isApprovedPayment) return true;
-    return text.contains('download') &&
-        _downloadStatusStates.any(text.contains);
+    if (isApprovedPayment) {
+      return CustomerNotificationCategory.purchaseCompleted;
+    }
+    if (text.contains('download') && _downloadStatusStates.any(text.contains)) {
+      return CustomerNotificationCategory.downloadStatus;
+    }
+    return null;
   }
 
-  static const _customerVisibleTypes = <String>{
-    'blogpost',
-    'newblogpost',
-    'blogpostnew',
-    'blogpostcreated',
-    'blogpostpublished',
-    'blogpublished',
-    'paymentapproved',
-    'paymentcompleted',
-    'paymentapproval',
-    'subscriptionpaymentapproved',
-    'subscriptionpurchasecompleted',
-    'subscriptionpurchaseapproved',
-    'subscriptionpurchased',
-    'premiumsubscriptionpaymentapproved',
-    'premiumsubscriptionpaymentcompleted',
-    'premiumsubscriptionpurchaseapproved',
-    'subscriptionpaymentcompleted',
-    'premiumsubscriptionpurchasecompleted',
-    'premiumsubscriptionpurchased',
-    'subscriptionexpired',
-    'premiumsubscriptionexpired',
-    'premiumexpired',
-    'downloadstarted',
-    'downloadprogress',
-    'downloading',
-    'downloadstatus',
-    'downloadcomplete',
-    'downloadcompleted',
-    'downloadfailed',
-    'downloadcancelled',
-    'downloadcanceled',
-    'downloadpaused',
-    'downloadresumed',
-  };
+  bool get isCustomerVisible => customerCategory != null;
 
   static const _approvedPaymentStates = <String>{
     'approved',

@@ -7,7 +7,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 const customerTestReleaseManifestUrl =
     'https://ygntv.org/app-updates/customer-test/latest.json';
 const _packageName = 'org.ygntv.ygntv_customer';
+const _testPackageName = '$_packageName.test';
 const _updateChannel = MethodChannel('org.ygntv.customer/app_update');
+
+typedef InstalledPackageNameReader = Future<String> Function();
+
+Future<String> _readInstalledPackageName() async =>
+    (await PackageInfo.fromPlatform()).packageName;
 
 class AppUpdateRelease {
   const AppUpdateRelease({
@@ -96,14 +102,28 @@ class AppUpdateDownloadStatus {
 }
 
 class CustomerAppUpdateService {
-  CustomerAppUpdateService({http.Client? client, MethodChannel? channel})
-    : _client = client ?? http.Client(),
-      _channel = channel ?? _updateChannel;
+  CustomerAppUpdateService({
+    http.Client? client,
+    MethodChannel? channel,
+    InstalledPackageNameReader? packageNameReader,
+  }) : _client = client ?? http.Client(),
+       _channel = channel ?? _updateChannel,
+       _packageNameReader = packageNameReader ?? _readInstalledPackageName;
 
   final http.Client _client;
   final MethodChannel _channel;
+  final InstalledPackageNameReader _packageNameReader;
 
   Future<AppUpdateRelease> fetchLatestRelease() async {
+    if (await _packageNameReader() != _testPackageName) {
+      throw const FormatException(
+        'YGNTV TEST updates are only available in the TEST app.',
+      );
+    }
+    return _fetchLatestReleaseManifest();
+  }
+
+  Future<AppUpdateRelease> _fetchLatestReleaseManifest() async {
     final response = await _client.get(
       Uri.parse(customerTestReleaseManifestUrl),
       headers: const {'Accept': 'application/json'},
@@ -123,11 +143,12 @@ class CustomerAppUpdateService {
   Future<AppUpdateRelease?> findAvailableUpdate({
     int? installedVersionCode,
   }) async {
+    if (await _packageNameReader() != _testPackageName) return null;
     final current =
         installedVersionCode ??
         int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ??
         0;
-    final latest = await fetchLatestRelease();
+    final latest = await _fetchLatestReleaseManifest();
     if (latest.versionCode <= current) return null;
     return latest;
   }

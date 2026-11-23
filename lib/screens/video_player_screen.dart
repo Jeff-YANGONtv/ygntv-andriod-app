@@ -188,36 +188,97 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     }
   }
 
-  Widget _skipButton({required bool forward}) => IconButton.filledTonal(
-    tooltip: forward ? 'Forward 15 seconds' : 'Back 15 seconds',
-    onPressed: () => unawaited(_seekRelative(forward ? 15 : -15)),
-    icon: SizedBox(
-      width: 42,
-      height: 42,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(
-            forward ? Icons.forward_rounded : Icons.replay_rounded,
-            size: 36,
-          ),
-          Positioned(
-            bottom: 4,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: const Color(0xFF35333A),
-                borderRadius: BorderRadius.circular(4),
+  Widget _playerActionSurface({
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+    double diameter = 40,
+    Color iconColor = const Color(0xFFE9C97E),
+  }) => Tooltip(
+    message: tooltip,
+    child: Material(
+      color: const Color(0xCC111116),
+      shape: CircleBorder(
+        side: BorderSide(color: Colors.white.withValues(alpha: .16)),
+      ),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: SizedBox(
+          width: diameter,
+          height: diameter,
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+      ),
+    ),
+  );
+
+  Widget _skipButton({required bool forward}) => Tooltip(
+    message: forward ? 'Forward 15 seconds' : 'Back 15 seconds',
+    child: Material(
+      color: const Color(0xCC111116),
+      shape: CircleBorder(
+        side: BorderSide(color: Colors.white.withValues(alpha: .17)),
+      ),
+      child: InkWell(
+        key: ValueKey(forward ? 'video-skip-forward' : 'video-skip-back'),
+        customBorder: const CircleBorder(),
+        onTap: () => unawaited(_seekRelative(forward ? 15 : -15)),
+        child: SizedBox(
+          width: 54,
+          height: 54,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(
+                forward ? Icons.forward_rounded : Icons.replay_rounded,
+                color: const Color(0xFFE9C97E),
+                size: 28,
               ),
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 2),
+              Positioned(
+                bottom: 7,
                 child: Text(
                   '15',
-                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: .9),
+                    fontSize: 8,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _playPauseButton(bool isPlaying) => Tooltip(
+    message: isPlaying ? 'Pause' : 'Play',
+    child: Container(
+      width: 66,
+      height: 66,
+      decoration: BoxDecoration(
+        color: const Color(0xFFD32F3B),
+        shape: BoxShape.circle,
+        border: Border.all(color: const Color(0xFFE8C27E), width: 1.2),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: .42), blurRadius: 18),
         ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          key: const ValueKey('video-play-pause'),
+          customBorder: const CircleBorder(),
+          onTap: _togglePlayback,
+          child: Icon(
+            isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            color: Colors.white,
+            size: 34,
+          ),
+        ),
       ),
     ),
   );
@@ -263,9 +324,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         .toList(growable: false),
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-      child: Text(
-        '${_playbackSpeed.toStringAsFixed(_playbackSpeed % 1 == 0 ? 0 : 1)}×',
-        style: const TextStyle(fontWeight: FontWeight.w800),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xCC111116),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: .16)),
+        ),
+        child: Text(
+          '${_playbackSpeed.toStringAsFixed(_playbackSpeed % 1 == 0 ? 0 : 1)}×',
+          style: const TextStyle(
+            color: Color(0xFFE9C97E),
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
       ),
     ),
   );
@@ -278,10 +351,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         Positioned(
           top: 2,
           left: 4,
-          child: IconButton.filledTonal(
+          child: _playerActionSurface(
             tooltip: 'Back',
+            icon: Icons.arrow_back_rounded,
             onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back_rounded),
           ),
         ),
     ],
@@ -338,7 +411,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 IconButton(
                   tooltip: 'Landscape fullscreen',
                   onPressed: () => unawaited(_toggleLandscape()),
-                  icon: const Icon(Icons.screen_rotation_alt_rounded),
+                  icon: const Icon(Icons.fullscreen_rounded),
                 ),
               ],
             ),
@@ -394,16 +467,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                           children: [
                                             _skipButton(forward: false),
                                             const SizedBox(width: 16),
-                                            IconButton.filledTonal(
-                                              onPressed: _togglePlayback,
-                                              iconSize: 42,
-                                              icon: Icon(
-                                                value!.isPlaying
-                                                    ? Icons.pause_rounded
-                                                    : Icons.play_arrow_rounded,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 16),
+                                            _playPauseButton(value!.isPlaying),
+                                            const SizedBox(width: 18),
                                             _skipButton(forward: true),
                                           ],
                                         ),
@@ -427,13 +492,41 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                                 ),
                                               ),
                                               Expanded(
-                                                child: Slider(
-                                                  min: 0,
-                                                  max: sliderMax,
-                                                  value: sliderValue.toDouble(),
-                                                  onChanged: duration > 0
-                                                      ? _seek
-                                                      : null,
+                                                child: SliderTheme(
+                                                  data: SliderTheme.of(context).copyWith(
+                                                    activeTrackColor:
+                                                        const Color(0xFFE5454F),
+                                                    inactiveTrackColor: Colors
+                                                        .white
+                                                        .withValues(alpha: .32),
+                                                    thumbColor: const Color(
+                                                      0xFFE8C27E,
+                                                    ),
+                                                    overlayColor: const Color(
+                                                      0x33E5454F,
+                                                    ),
+                                                    trackHeight: 3,
+                                                    thumbShape:
+                                                        const RoundSliderThumbShape(
+                                                          enabledThumbRadius: 5,
+                                                        ),
+                                                    overlayShape:
+                                                        const RoundSliderOverlayShape(
+                                                          overlayRadius: 12,
+                                                        ),
+                                                  ),
+                                                  child: Slider(
+                                                    key: const ValueKey(
+                                                      'video-progress-slider',
+                                                    ),
+                                                    min: 0,
+                                                    max: sliderMax,
+                                                    value: sliderValue
+                                                        .toDouble(),
+                                                    onChanged: duration > 0
+                                                        ? _seek
+                                                        : null,
+                                                  ),
                                                 ),
                                               ),
                                               Text(
@@ -452,41 +545,82 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                     ),
                                     if (_landscapeMode)
                                       Positioned(
-                                        top: 2,
-                                        left: 4,
-                                        right: 4,
-                                        child: Row(
-                                          children: [
-                                            IconButton(
-                                              tooltip: 'Back',
-                                              onPressed: () =>
-                                                  Navigator.of(context)
-                                                      .maybePop(),
-                                              icon: const Icon(
-                                                Icons.arrow_back_rounded,
-                                              ),
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        child: Container(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            10,
+                                            4,
+                                            10,
+                                            18,
+                                          ),
+                                          decoration: const BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.topCenter,
+                                              end: Alignment.bottomCenter,
+                                              colors: [
+                                                Color(0xC9000000),
+                                                Color(0x00000000),
+                                              ],
                                             ),
-                                            Expanded(
-                                              child: Text(
-                                                widget.title,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w700,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              _playerActionSurface(
+                                                tooltip: 'Back',
+                                                icon: Icons.arrow_back_rounded,
+                                                onPressed: () =>
+                                                    Navigator.of(context)
+                                                        .maybePop(),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      widget.title,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    const Text(
+                                                      'YANGON TV  ·  PROTECTED PLAYBACK',
+                                                      style: TextStyle(
+                                                        color: Color(
+                                                          0xFFE8C27E,
+                                                        ),
+                                                        fontSize: 8,
+                                                        letterSpacing: 1.1,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
-                                            ),
-                                            _speedMenu(),
-                                            IconButton(
-                                              tooltip: 'Exit landscape',
-                                              onPressed: () =>
-                                                  unawaited(_toggleLandscape()),
-                                              icon: const Icon(
-                                                Icons.fullscreen_exit_rounded,
+                                              _speedMenu(),
+                                              const SizedBox(width: 5),
+                                              _playerActionSurface(
+                                                tooltip: 'Exit landscape',
+                                                icon: Icons
+                                                    .fullscreen_exit_rounded,
+                                                onPressed: () => unawaited(
+                                                  _toggleLandscape(),
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                   ],

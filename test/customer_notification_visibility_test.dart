@@ -31,8 +31,9 @@ void main() {
           _entry('old-blog', 'blog_post_updated'),
           _entry('pending', 'subscription_payment_pending'),
           _entry('failed', 'download_failed'),
+          _entry('lookalike', 'support_reply', title: 'New blog post'),
         ],
-        unreadCount: 6,
+        unreadCount: 7,
       );
 
       expect(feed.visibleNotifications.map((item) => item.id), [
@@ -42,6 +43,14 @@ void main() {
         'expired',
         'download',
         'failed',
+      ]);
+      expect(feed.visibleNotifications.map((item) => item.customerCategory), [
+        CustomerNotificationCategory.newBlogPost,
+        CustomerNotificationCategory.newBlogPost,
+        CustomerNotificationCategory.purchaseCompleted,
+        CustomerNotificationCategory.subscriptionExpired,
+        CustomerNotificationCategory.downloadStatus,
+        CustomerNotificationCategory.downloadStatus,
       ]);
       expect(feed.visibleUnreadCount, 5);
     },

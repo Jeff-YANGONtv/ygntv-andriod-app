@@ -124,7 +124,12 @@ Widget _app(_WheelService service) => MaterialApp(
 );
 
 Future<void> _openMoviePicker(WidgetTester tester) async {
-  await tester.tap(find.text('Choose reward content'));
+  final stickyAction = find.byKey(const ValueKey('daily-reward-sticky-choose'));
+  if (stickyAction.evaluate().isNotEmpty) {
+    await tester.tap(stickyAction);
+  } else {
+    await tester.tap(find.text('Choose reward content'));
+  }
   await tester.pumpAndSettle();
 }
 
@@ -175,7 +180,8 @@ void main() {
     await tester.pumpWidget(_app(service));
     await tester.pumpAndSettle();
 
-    expect(find.text('Daily Sign In Bonus (Lucky Box)'), findsOneWidget);
+    expect(find.text('Daily Lucky Box'), findsOneWidget);
+    expect(find.text('Yangon TV VIP Rewards'), findsOneWidget);
     expect(find.byKey(const ValueKey('daily-lucky-box-art')), findsOneWidget);
     expect(find.byKey(const ValueKey('daily-wheel-rotating')), findsNothing);
     expect(find.text('Lucky Box odds'), findsNothing);
@@ -194,16 +200,85 @@ void main() {
 
     final scrollable = find.byType(ListView).first;
     await tester.dragUntilVisible(
-      find.text('Bonus history'),
+      find.text('RECENT REWARDS'),
       scrollable,
       const Offset(0, -250),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Bonus history'), findsOneWidget);
+    expect(find.text('RECENT REWARDS'), findsOneWidget);
     expect(find.text('No bonus boxes opened yet'), findsOneWidget);
     expect(find.text('A whole season'), findsNothing);
     service.dispose();
   });
+
+  testWidgets(
+    'content reward shows modal, Keep for Later, sticky bar and choose flow',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final expires = DateTime.now().add(
+        const Duration(hours: 23, minutes: 50),
+      );
+      final service = _WheelService(
+        items: const [
+          {'id': 1, 'title': 'Moonlit River'},
+          {'id': 2, 'title': 'Autumn Road'},
+        ],
+        initialCanSpin: true,
+        spinResults: [
+          {
+            'id': 'two-movie-spin',
+            'reward_code': 'two_movies',
+            'selection_status': 'pending',
+            'expires_at': expires.toIso8601String(),
+          },
+        ],
+        includeExistingReward: false,
+      );
+      await tester.pumpWidget(_app(service));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Claim Lucky Box'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('daily-reward-dialog')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('daily-reward-dialog-title')),
+        findsOneWidget,
+      );
+      expect(find.text('FREE WATCH 2 MOVIES'), findsWidgets);
+      expect(find.text('Choose Movies Now ›'), findsOneWidget);
+      expect(find.text('Keep for Later'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('daily-reward-sticky-action-bar')),
+        findsOneWidget,
+      );
+      expect(find.text('2 PICKS LEFT'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey('daily-reward-keep-for-later')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('daily-reward-dialog')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('daily-reward-sticky-action-bar')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Replay'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('daily-reward-dialog')), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('daily-reward-primary-action')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Choose exactly 2 movies'), findsOneWidget);
+      expect(find.text('Moonlit River'), findsOneWidget);
+      service.dispose();
+    },
+  );
 
   testWidgets('one-episode picker uses concise singular English labels', (
     tester,
@@ -254,18 +329,38 @@ void main() {
       final art = find.byKey(const ValueKey('daily-lucky-box-art'));
       final closedPainter = tester.widget<CustomPaint>(art).painter!;
       expect(find.text('Lucky Box reward'), findsNothing);
-      await tester.tap(find.widgetWithText(FilledButton, 'Open Lucky Box'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Claim Lucky Box'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
-      expect(find.text('Opening your Lucky Box…'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Unlocking Mystery Box...'),
+        findsOneWidget,
+      );
+      final progress = tester.widget<LinearProgressIndicator>(
+        find.byKey(const ValueKey('daily-box-opening-progress')),
+      );
+      expect(progress.value, closeTo(.0625, .01));
       expect(find.text('Lucky Box reward'), findsNothing);
       expect(
         tester.widget<CustomPaint>(art).painter!.shouldRepaint(closedPainter),
         isTrue,
       );
 
-      await tester.pump(const Duration(milliseconds: 1700));
+      await tester.pump(const Duration(milliseconds: 1300));
+      final phase = find.byKey(const ValueKey('daily-box-phase-label'));
+      final phaseOpacity = find.descendant(
+        of: phase,
+        matching: find.byType(AnimatedOpacity),
+      );
+      expect(tester.widget<AnimatedOpacity>(phaseOpacity).opacity, 1);
+      expect(find.text('Charging golden cinema reward...'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 1500));
+      final chargingPainter = tester.widget<CustomPaint>(art).painter!;
+      expect(chargingPainter.shouldRepaint(closedPainter), isTrue);
+      await tester.pump(const Duration(milliseconds: 1100));
       await tester.pump();
+      expect(find.byKey(const ValueKey('daily-reward-dialog')), findsOneWidget);
+      expect(find.text('DAILY REWARD UNLOCKED'), findsOneWidget);
       expect(find.text('Lucky Box reward'), findsOneWidget);
       final rewardOpacity = tester.widget<Opacity>(
         find
@@ -294,7 +389,7 @@ void main() {
       expect(
         tester
             .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Open Lucky Box'),
+              find.widgetWithText(FilledButton, 'Claim Lucky Box'),
             )
             .onPressed,
         isNotNull,
@@ -341,9 +436,18 @@ void main() {
       await tester.pumpAndSettle();
 
       Future<void> openBoxAndWait() async {
-        await tester.tap(find.widgetWithText(FilledButton, 'Open Lucky Box'));
+        if (find
+            .byKey(const ValueKey('daily-reward-dialog'))
+            .evaluate()
+            .isNotEmpty) {
+          await tester.tap(find.text('Open Another Box ›'));
+        } else {
+          await tester.tap(
+            find.widgetWithText(FilledButton, 'Claim Lucky Box'),
+          );
+        }
         await tester.pump();
-        await tester.pump(const Duration(seconds: 2));
+        await tester.pump(const Duration(seconds: 4));
         await tester.pumpAndSettle();
       }
 
@@ -357,7 +461,7 @@ void main() {
         expect(
           tester
               .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Open Lucky Box'),
+                find.widgetWithText(FilledButton, 'Claim Lucky Box'),
               )
               .onPressed,
           isNotNull,
@@ -372,7 +476,10 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.widgetWithText(FilledButton, 'Open Lucky Box'), findsNothing);
+      expect(
+        find.widgetWithText(FilledButton, 'Claim Lucky Box'),
+        findsNothing,
+      );
       service.dispose();
     },
   );
@@ -401,7 +508,7 @@ void main() {
       await tester.pumpWidget(_app(service));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Open Lucky Box'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Claim Lucky Box'));
       await tester.pump();
       expect(service.spinCalls, 1);
       final pendingButton = find.widgetWithText(
@@ -445,7 +552,7 @@ void main() {
       await tester.pumpWidget(_app(service));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Open Lucky Box'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Claim Lucky Box'));
       await tester.pumpAndSettle();
       expect(find.text('server unavailable'), findsOneWidget);
       expect(find.text('Lucky Box reward'), findsNothing);
@@ -474,7 +581,7 @@ void main() {
     await tester.pumpWidget(_app(service));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Open Lucky Box'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Claim Lucky Box'));
     await tester.pumpAndSettle();
     expect(
       find.text('Lucky Box request failed. Please try again.'),
@@ -581,12 +688,12 @@ void main() {
     expect(find.text('Lucky Box odds'), findsNothing);
     final scrollable = find.byType(ListView).first;
     await tester.dragUntilVisible(
-      find.text('Bonus history'),
+      find.text('RECENT REWARDS'),
       scrollable,
       const Offset(0, -200),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Bonus history'), findsOneWidget);
+    expect(find.text('RECENT REWARDS'), findsOneWidget);
     expect(find.textContaining('Selection: Pending'), findsOneWidget);
     await tester.ensureVisible(find.text('Choose reward content'));
     await tester.pumpAndSettle();

@@ -141,6 +141,10 @@ class _FakeCustomerService extends AuthService {
   );
 
   @override
+  Future<List<TvLibraryEntry>> getWatchHistory({int page = 1}) async =>
+      const [];
+
+  @override
   Future<List<SupportConversationSummary>> getSupportConversations() async =>
       const [];
 
@@ -780,19 +784,20 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(find.byKey(const ValueKey('customer-nav-movies')));
+      await tester.tap(find.byKey(const ValueKey('customer-nav-movie')));
       await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('customer-app-sticky-header')),
         findsOneWidget,
       );
       expect(find.byKey(const ValueKey('customer-bottom-nav')), findsOneWidget);
+      final movieSearch = find.byKey(const ValueKey('catalog-search-field'));
+      expect(movieSearch, findsOneWidget);
       expect(
-        tester
-            .widget<Text>(find.byKey(const ValueKey('catalog-page-title')))
-            .data,
-        'Movie',
+        tester.widget<TextField>(movieSearch).decoration?.hintText,
+        'Search Movie',
       );
+      expect(find.byKey(const ValueKey('catalog-page-title')), findsNothing);
     },
   );
 

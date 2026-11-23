@@ -62,7 +62,7 @@ class ActivityHistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-    length: 4,
+    length: 5,
     child: Scaffold(
       key: const ValueKey('activity-history-screen'),
       backgroundColor: ygntvBackground,
@@ -75,6 +75,7 @@ class ActivityHistoryScreen extends StatelessWidget {
             Tab(text: 'Watched'),
             Tab(text: 'Downloaded'),
             Tab(text: 'Subscription History'),
+            Tab(text: 'Claimed Bonus'),
           ],
         ),
       ),
@@ -84,6 +85,7 @@ class ActivityHistoryScreen extends StatelessWidget {
           _LibraryList(service: service, mode: _LibraryMode.history),
           _DownloadsList(service: service),
           const _UnavailableSubscriptionHistory(),
+          _ClaimedBonusList(service: service),
         ],
       ),
     ),
@@ -101,6 +103,209 @@ class _UnavailableSubscriptionHistory extends StatelessWidget {
       copy: 'This app version does not receive subscription history records.',
     ),
   );
+}
+
+class _ClaimedBonusList extends StatefulWidget {
+  const _ClaimedBonusList({required this.service});
+
+  final AuthService service;
+
+  @override
+  State<_ClaimedBonusList> createState() => _ClaimedBonusListState();
+}
+
+class _ClaimedBonusListState extends State<_ClaimedBonusList> {
+  late Future<Map<String, dynamic>> _overview;
+
+  @override
+  void initState() {
+    super.initState();
+    _overview = widget.service.getDailySignInWheelOverview();
+  }
+
+  Future<void> _refresh() async {
+    final next = widget.service.getDailySignInWheelOverview();
+    setState(() => _overview = next);
+    try {
+      await next;
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+    color: ygntvRed,
+    onRefresh: _refresh,
+    child: FutureBuilder<Map<String, dynamic>>(
+      future: _overview,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const _ScrollableMessage(
+            child: CircularProgressIndicator(color: ygntvRed),
+          );
+        }
+        if (snapshot.hasError) {
+          return _ScrollableMessage(
+            child: _InfoState(
+              icon: Icons.wifi_off_rounded,
+              title: 'Bonus history could not be loaded',
+              copy: snapshot.error.toString(),
+              action: TextButton.icon(
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try again'),
+              ),
+            ),
+          );
+        }
+        final rows = _claimedBonusRows(snapshot.data?['rewards']);
+        if (rows.isEmpty) {
+          return const _ScrollableMessage(
+            child: _InfoState(
+              icon: Icons.card_giftcard_outlined,
+              title: 'No claimed bonuses yet',
+              copy: 'Daily Sign In Bonus rewards you open will appear here.',
+            ),
+          );
+        }
+        return ListView.separated(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
+          itemCount: rows.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 10),
+          itemBuilder: (context, index) => _ClaimedBonusCard(
+            key: ValueKey('claimed-bonus-${rows[index]['id'] ?? index}'),
+            row: rows[index],
+          ),
+        );
+      },
+    ),
+  );
+}
+
+List<Map<String, dynamic>> _claimedBonusRows(dynamic value) {
+  if (value is! List) return const [];
+  return value
+      .whereType<Map>()
+      .map((row) => Map<String, dynamic>.from(row))
+      .toList(growable: false);
+}
+
+class _ClaimedBonusCard extends StatelessWidget {
+  const _ClaimedBonusCard({required this.row, super.key});
+
+  final Map<String, dynamic> row;
+
+  @override
+  Widget build(BuildContext context) {
+    final selection = row['selection'] is Map
+        ? Map<String, dynamic>.from(row['selection'] as Map)
+        : const <String, dynamic>{};
+    final selectedTitle = '${selection['title'] ?? selection['name'] ?? ''}'
+        .trim();
+    final rawStatus = '${row['selection_status'] ?? ''}'.toLowerCase();
+    final status = switch (rawStatus) {
+      'selected' => 'Selected',
+      'pending' => 'Pending selection',
+      'expired' => 'Expired',
+      _ => 'Claimed',
+    };
+    final timestamp =
+        row['claimed_at'] ??
+        row['opened_at'] ??
+        row['created_at'] ??
+        row['spun_at'];
+    final date = _bonusHistoryDate(timestamp);
+    final expiry = rawStatus == 'pending'
+        ? _bonusHistoryDate(row['expires_at'])
+        : '';
+    final details = <String>[
+      status,
+      if (date.isNotEmpty) 'Opened $date',
+      if (expiry.isNotEmpty) 'Expires $expiry',
+    ].join(' · ');
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: ygntvPanel,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: .07)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: ygntvRed.withValues(alpha: .16),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.card_giftcard_rounded,
+              color: ygntvGold,
+              size: 23,
+            ),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _claimedBonusTitle(row),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  details,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: ygntvMuted, fontSize: 9.5),
+                ),
+                if (selectedTitle.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    'Selected: $selectedTitle',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: ygntvGold, fontSize: 9.5),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _claimedBonusTitle(Map<String, dynamic> row) {
+  final label = '${row['reward_label'] ?? ''}'.trim();
+  if (label.isNotEmpty) return label;
+  final code = '${row['reward_code'] ?? row['code'] ?? ''}';
+  return switch (code) {
+    'one_episode' => '1 Episode',
+    'one_movie' => '1 Movie',
+    'good_luck_next_round' => 'Good Luck in Next Round',
+    'two_movies' => '2 Movies',
+    'two_episodes' => '2 Episodes',
+    'roll_again' => 'Roll Again',
+    'three_movies' => '3 Movies',
+    'thanks_for_choosing_us' => 'Thank You',
+    _ => code.isEmpty ? 'Bonus reward' : code,
+  };
+}
+
+String _bonusHistoryDate(dynamic value) {
+  final date = DateTime.tryParse('$value')?.toLocal();
+  if (date == null) return '';
+  return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 }
 
 enum _LibraryMode { continueWatching, history, saved }
@@ -353,11 +558,27 @@ class _LibraryListState extends State<_LibraryList> {
     _entries = _load();
   }
 
-  Future<List<TvLibraryEntry>> _load() => switch (widget.mode) {
-    _LibraryMode.continueWatching => widget.service.getContinueWatching(),
-    _LibraryMode.history => widget.service.getWatchHistory(),
-    _LibraryMode.saved => widget.service.getSavedContent(),
-  };
+  Future<List<TvLibraryEntry>> _load() async {
+    if (widget.mode == _LibraryMode.continueWatching) {
+      return widget.service.getContinueWatching();
+    }
+
+    final allEntries = <TvLibraryEntry>[];
+    final seen = <String>{};
+    for (var page = 1; page <= 100; page++) {
+      final pageEntries = widget.mode == _LibraryMode.saved
+          ? await widget.service.getSavedContent(page: page)
+          : await widget.service.getWatchHistory(page: page);
+      if (pageEntries.isEmpty) break;
+
+      final newEntries = pageEntries
+          .where((entry) => seen.add('${entry.contentType}:${entry.contentId}'))
+          .toList(growable: false);
+      if (newEntries.isEmpty) break;
+      allEntries.addAll(newEntries);
+    }
+    return allEntries;
+  }
 
   Future<void> _refresh() async {
     final next = _load();

@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:ygntv_customer/deep_links/app_deep_link.dart';
 import 'package:ygntv_customer/services/customer_app_update_service.dart';
 
@@ -127,5 +131,57 @@ void main() {
         }
       },
     );
+  });
+
+  group('CustomerAppUpdateService.findAvailableUpdate', () {
+    test(
+      'does not request the TEST manifest for the production package',
+      () async {
+        var requestCount = 0;
+        final service = CustomerAppUpdateService(
+          client: MockClient((request) async {
+            requestCount++;
+            return http.Response('', 200);
+          }),
+          packageNameReader: () async => 'org.ygntv.ygntv_customer',
+        );
+
+        expect(
+          await service.findAvailableUpdate(installedVersionCode: 2018),
+          isNull,
+        );
+        await expectLater(service.fetchLatestRelease(), throwsFormatException);
+        expect(requestCount, 0);
+      },
+    );
+
+    test('checks the TEST manifest for the .test package', () async {
+      final requests = <http.Request>[];
+      final service = CustomerAppUpdateService(
+        client: MockClient((request) async {
+          requests.add(request);
+          return http.Response(
+            jsonEncode({
+              'channel': 'customer-test',
+              'package_name': 'org.ygntv.ygntv_customer',
+              'version_name': '1.0-test',
+              'version_code': 2019,
+              'apk_url':
+                  'https://ygntv.org/app-updates/customer-test/app-2019.apk',
+              'sha256': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            }),
+            200,
+          );
+        }),
+        packageNameReader: () async => 'org.ygntv.ygntv_customer.test',
+      );
+
+      final release = await service.findAvailableUpdate(
+        installedVersionCode: 2018,
+      );
+
+      expect(release?.versionCode, 2019);
+      expect(requests.single.url.toString(), customerTestReleaseManifestUrl);
+    });
   });
 }
